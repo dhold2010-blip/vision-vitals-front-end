@@ -1,12 +1,19 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useLocation } from "@tanstack/react-router";
 import { ChevronDown, Download, Save, Share2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { Chip, GlassCard, SectionTitle } from "@/components/vv/glass-card";
 import { ProgressBar, ProgressRing } from "@/components/vv/progress";
 import { latestScan, metrics, recommendations } from "@/lib/vitals";
+import type { VisionCaptureResult } from "@/lib/vision-vitals";
 import { cn } from "@/lib/utils";
+
+declare module "@tanstack/history" {
+  interface HistoryState {
+    result?: VisionCaptureResult;
+  }
+}
 
 export const Route = createFileRoute("/results")({
   head: () => ({
@@ -28,37 +35,85 @@ export const Route = createFileRoute("/results")({
 });
 
 function Results() {
+  const location = useLocation();
+  const result = location.state?.result;
   const [open, setOpen] = useState<string | null>("age");
+  const analysisResult = result?.analysis?.result;
+  const hasRealResult = Boolean(analysisResult);
+  const resultStatus = analysisResult?.result_status ?? "UNAVAILABLE";
+  const resultConfidence = analysisResult?.confidence ?? 0;
+  const displayMetrics = useMemo(
+    () => [
+      {
+        key: "observation",
+        label: "AI observation",
+        value: analysisResult?.observation || "No observation was returned by the analysis service.",
+        detail: analysisResult?.limitations?.join(" ") || "The result is limited to the backend response.",
+        confidence: Math.round(resultConfidence * 100),
+      },
+      {
+        key: "status",
+        label: "Analysis status",
+        value: resultStatus,
+        detail: analysisResult?.warnings?.join(" ") || "No warnings were returned.",
+        confidence: Math.round(resultConfidence * 100),
+      },
+    ],
+    [analysisResult, resultConfidence, resultStatus],
+  );
 
   return (
     <AppShell>
       <PageHeader
-        eyebrow={latestScan.capturedAt}
+        eyebrow={
+          result?.capture?.created_at
+            ? new Date(result.capture.created_at).toLocaleString()
+            : latestScan.capturedAt
+        }
         title="Your analysis"
-        subtitle={`Body type ${latestScan.bodyType} · overall confidence ${latestScan.confidence}%`}
+        subtitle={`Status ${resultStatus} · confidence ${Math.round(resultConfidence * 100)}%`}
       />
+
+      {!hasRealResult ? (
+        <GlassCard className="animate-scale-in overflow-hidden p-6">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            No capture result was returned. This view is showing the last saved scan fallback.
+          </p>
+        </GlassCard>
+      ) : null}
 
       <GlassCard className="animate-scale-in overflow-hidden p-6">
         <div className="flex flex-col items-center gap-6 sm:flex-row">
           <ProgressRing
-            value={latestScan.score}
+            value={hasRealResult ? Math.round(resultConfidence * 100) : latestScan.score}
             size={180}
-            caption="Health score"
+            caption={hasRealResult ? "Analysis confidence" : "Health score"}
             gradientId="res-ring"
           />
-          <div className="grid flex-1 gap-3">
-            <ProgressBar value={latestScan.symmetry} label="Face symmetry" tone="accent" />
-            <ProgressBar value={latestScan.posture} label="Posture" tone="secondary" />
-            <ProgressBar value={latestScan.hydration} label="Hydration" tone="success" />
-            <ProgressBar value={latestScan.stress} label="Stress load" tone="warning" />
+          {hasRealResult ? (
+            <div className="flex-1">
+              <p className="text-sm font-semibold">{analysisResult?.model}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {analysisResult?.observation}
+              </p>
+            </div>
+          ) : (
+            <div className="grid flex-1 gap-3">
+              <ProgressBar value={latestScan.symmetry} label="Face symmetry" tone="accent" />
+              <ProgressBar value={latestScan.posture} label="Posture" tone="secondary" />
+              <ProgressBar value={latestScan.hydration} label="Hydration" tone="success" />
+              <ProgressBar value={latestScan.stress} label="Stress load" tone="warning" />
+            </div>
+          )}
+        </div>
+        {!hasRealResult ? (
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Chip active>{latestScan.bodyType}</Chip>
+            <Chip>{latestScan.skinTone}</Chip>
+            <Chip>{latestScan.heartRate} bpm</Chip>
+            <Chip>BMI {latestScan.bmi}</Chip>
           </div>
-        </div>
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Chip active>{latestScan.bodyType}</Chip>
-          <Chip>{latestScan.skinTone}</Chip>
-          <Chip>{latestScan.heartRate} bpm</Chip>
-          <Chip>BMI {latestScan.bmi}</Chip>
-        </div>
+        ) : null}
       </GlassCard>
 
       <div className="mt-4 grid grid-cols-3 gap-3">
@@ -80,7 +135,7 @@ function Results() {
 
       <SectionTitle className="mt-8 mb-3" title="Full breakdown" />
       <ul className="grid gap-3">
-        {metrics.map((m) => {
+        {(hasRealResult ? displayMetrics : metrics).map((m) => {
           const isOpen = open === m.key;
           return (
             <GlassCard as="li" key={m.key} className="overflow-hidden">
@@ -125,23 +180,27 @@ function Results() {
         })}
       </ul>
 
-      <SectionTitle className="mt-8 mb-3" title="Recommendations" />
-      <div className="grid gap-3 sm:grid-cols-3">
-        {recommendations.map((r) => (
-          <GlassCard key={r.title} className="p-5" interactive>
-            <span
-              className={cn(
-                "block h-1 w-10 rounded-full",
-                r.tone === "primary" && "bg-primary",
-                r.tone === "secondary" && "bg-secondary",
-                r.tone === "accent" && "bg-accent",
-              )}
-            />
-            <p className="mt-4 text-sm font-semibold">{r.title}</p>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{r.body}</p>
-          </GlassCard>
-        ))}
-      </div>
+      {!hasRealResult ? (
+        <>
+          <SectionTitle className="mt-8 mb-3" title="Recommendations" />
+          <div className="grid gap-3 sm:grid-cols-3">
+            {recommendations.map((r) => (
+              <GlassCard key={r.title} className="p-5" interactive>
+                <span
+                  className={cn(
+                    "block h-1 w-10 rounded-full",
+                    r.tone === "primary" && "bg-primary",
+                    r.tone === "secondary" && "bg-secondary",
+                    r.tone === "accent" && "bg-accent",
+                  )}
+                />
+                <p className="mt-4 text-sm font-semibold">{r.title}</p>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{r.body}</p>
+              </GlassCard>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       <div className="mt-8 grid grid-cols-3 gap-3">
         <button

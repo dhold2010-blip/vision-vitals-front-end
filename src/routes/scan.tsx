@@ -3,6 +3,7 @@ import { Check, CircleAlert, RefreshCw, SwitchCamera, X, Zap } from "lucide-reac
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Backdrop } from "@/components/vv/app-shell";
 import { scanStages } from "@/lib/vitals";
+import { captureVision, type VisionCaptureResult } from "@/lib/vision-vitals";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/scan")({
@@ -29,6 +30,7 @@ function ScanScreen() {
   const streamRef = useRef<MediaStream | null>(null);
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const [torch, setTorch] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
@@ -36,6 +38,38 @@ function ScanScreen() {
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+  }, []);
+
+  const captureCurrentFrame = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+      throw new Error("The camera frame is not ready. Please retry the scan.");
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("The browser could not prepare the camera image.");
+    }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const imageBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("The camera image could not be created."));
+      }, "image/jpeg", 0.9);
+    });
+    const image = new File([imageBlob], "vision-vitals-camera.jpg", {
+      type: "image/jpeg",
+    });
+    const formData = new FormData();
+    formData.append("image", image);
+    formData.append("image_width", String(canvas.width));
+    formData.append("image_height", String(canvas.height));
+
+    return captureVision({ data: formData });
   }, []);
 
   useEffect(() => {
@@ -86,10 +120,24 @@ function ScanScreen() {
       setProgress(0);
       setPhase("analyzing");
     } else if (phase === "analyzing") {
-      stop();
-      void navigate({ to: "/results" });
+      setCaptureError(null);
+      void captureCurrentFrame()
+        .then((result) => {
+          stop();
+          navigate({ to: "/results", state: { result } });
+        })
+        .catch((error: unknown) => {
+          stop();
+          const message =
+            error instanceof Error
+              ? error.message
+              : "The scan could not be completed. Please try again.";
+          setCaptureError(message);
+          setPhase("idle");
+          setProgress(0);
+        });
     }
-  }, [progress, phase, navigate, stop]);
+  }, [captureCurrentFrame, navigate, phase, progress, stop]);
 
   const stageIndex = Math.min(
     scanStages.length - 1,
@@ -143,11 +191,13 @@ function ScanScreen() {
             )}
           />
 
-          {cameraError ? (
+          {cameraError || captureError ? (
             <div className="absolute inset-0 grid place-items-center px-8 text-center">
               <div>
                 <CircleAlert className="mx-auto size-6 text-warning" />
-                <p className="mt-3 text-sm text-muted-foreground">{cameraError}</p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {cameraError || captureError}
+                </p>
               </div>
             </div>
           ) : null}
