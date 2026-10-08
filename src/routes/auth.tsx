@@ -1,9 +1,16 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Apple, Fingerprint, Mail, ArrowRight, Lock, User } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Lock, Mail } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Backdrop } from "@/components/vv/app-shell";
 import { GlassCard } from "@/components/vv/glass-card";
+import {
+  getCurrentUser,
+  loginAccount,
+  logoutAccount,
+  registerAccount,
+  type AuthUser,
+} from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
@@ -12,30 +19,32 @@ export const Route = createFileRoute("/auth")({
       { title: "Sign in — VisionVitals AI" },
       {
         name: "description",
-        content:
-          "Sign in or create your VisionVitals AI account with email, biometrics, Google or Apple.",
+        content: "Sign in or create your VisionVitals AI account with email and password.",
       },
       { property: "og:title", content: "Sign in — VisionVitals AI" },
-      { property: "og:description", content: "Email, biometric, Google and Apple sign in." },
+      { property: "og:description", content: "Email and password sign in." },
     ],
   }),
   component: Auth,
 });
 
-type Mode = "login" | "register" | "forgot";
+type Mode = "login" | "register";
 
 function Field({
   icon: Icon,
   label,
   type = "text",
   autoComplete,
+  value,
+  onChange,
 }: {
   icon: typeof Mail;
   label: string;
   type?: string;
   autoComplete?: string;
+  value: string;
+  onChange: (value: string) => void;
 }) {
-  const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   const floated = focused || value.length > 0;
 
@@ -64,7 +73,7 @@ function Field({
         autoComplete={autoComplete}
         aria-label={label}
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         className="w-full bg-transparent pl-7 text-sm outline-none"
@@ -75,19 +84,25 @@ function Field({
 
 function Auth() {
   const [mode, setMode] = useState<Mode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    void getCurrentUser()
+      .then(setUser)
+      .catch(() => setUser(null));
+  }, []);
 
   const copy = {
     login: { title: "Welcome back", sub: "Sign in to pick up your health trend.", cta: "Sign in" },
     register: {
       title: "Create account",
-      sub: "Two fields and your first scan is ready.",
+      sub: "Create your account to start a personal scan.",
       cta: "Create account",
-    },
-    forgot: {
-      title: "Reset password",
-      sub: "We'll email you a secure reset link.",
-      cta: "Send reset link",
     },
   }[mode];
 
@@ -107,77 +122,72 @@ function Auth() {
 
           <form
             className="mt-7 grid gap-3"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              if (mode === "forgot") {
-                toast.success("Reset link sent");
-                setMode("login");
-              } else {
+              setError(null);
+              setPending(true);
+              try {
+                const authenticatedUser =
+                  mode === "register"
+                    ? await registerAccount({ data: { email, password } })
+                    : await loginAccount({ data: { email, password } });
+                setUser(authenticatedUser);
+                toast.success(mode === "register" ? "Account created" : "Signed in");
                 void navigate({ to: "/" });
+              } catch (reason) {
+                setError(
+                  reason instanceof Error
+                    ? reason.message
+                    : "Authentication failed. Please try again.",
+                );
+              } finally {
+                setPending(false);
               }
             }}
           >
-            {mode === "register" ? (
-              <Field icon={User} label="Full name" autoComplete="name" />
-            ) : null}
-            <Field icon={Mail} label="Email address" type="email" autoComplete="email" />
-            {mode !== "forgot" ? (
-              <Field icon={Lock} label="Password" type="password" autoComplete="current-password" />
-            ) : null}
-
-            {mode === "login" ? (
-              <button
-                type="button"
-                onClick={() => setMode("forgot")}
-                className="justify-self-end text-xs font-medium text-secondary"
-              >
-                Forgot password?
-              </button>
+            <Field
+              icon={Mail}
+              label="Email address"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={setEmail}
+            />
+            <Field
+              icon={Lock}
+              label="Password"
+              type="password"
+              autoComplete={mode === "register" ? "new-password" : "current-password"}
+              value={password}
+              onChange={setPassword}
+            />
+            {error ? (
+              <p role="alert" className="text-sm text-warning">
+                {error}
+              </p>
             ) : null}
 
             <button
               type="submit"
-              className="press mt-2 flex items-center justify-center gap-2 rounded-2xl aurora py-4 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-glow)]"
+              disabled={pending || !email.trim() || password.length < 12}
+              className="press mt-2 flex items-center justify-center gap-2 rounded-2xl aurora py-4 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-glow)] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {copy.cta} <ArrowRight className="size-4" />
+              {pending ? "Please wait…" : copy.cta} <ArrowRight className="size-4" />
             </button>
           </form>
 
-          {mode !== "forgot" ? (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  toast.success("Face ID verified");
-                  void navigate({ to: "/" });
-                }}
-                className="press mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-secondary/40 bg-secondary/10 py-4 text-sm font-semibold"
-              >
-                <Fingerprint className="size-4 text-secondary" /> Use biometrics
-              </button>
-
-              <div className="my-6 flex items-center gap-3 text-[11px] tracking-widest text-muted-foreground uppercase">
-                <span className="h-px flex-1 bg-border" /> or{" "}
-                <span className="h-px flex-1 bg-border" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => void navigate({ to: "/" })}
-                  className="press flex items-center justify-center gap-2 rounded-2xl border border-border bg-white/5 py-3.5 text-sm font-medium"
-                >
-                  <GoogleMark /> Google
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void navigate({ to: "/" })}
-                  className="press flex items-center justify-center gap-2 rounded-2xl border border-border bg-white/5 py-3.5 text-sm font-medium"
-                >
-                  <Apple className="size-4" /> Apple
-                </button>
-              </div>
-            </>
+          {user ? (
+            <button
+              type="button"
+              className="press mt-4 w-full rounded-2xl border border-border py-3 text-sm"
+              onClick={async () => {
+                await logoutAccount();
+                setUser(null);
+                toast.success("Signed out");
+              }}
+            >
+              Sign out {user.email}
+            </button>
           ) : null}
         </GlassCard>
 
@@ -185,7 +195,10 @@ function Auth() {
           {mode === "register" ? "Already have an account? " : "New to VisionVitals? "}
           <button
             type="button"
-            onClick={() => setMode(mode === "register" ? "login" : "register")}
+            onClick={() => {
+              setError(null);
+              setMode(mode === "register" ? "login" : "register");
+            }}
             className="font-semibold text-secondary"
           >
             {mode === "register" ? "Sign in" : "Create one"}
@@ -196,25 +209,5 @@ function Auth() {
         </p>
       </div>
     </div>
-  );
-}
-
-function GoogleMark() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true">
-      <path
-        fill="#EA4335"
-        d="M12 10.2v3.9h5.5a4.7 4.7 0 0 1-2 3.1l3.2 2.5c1.9-1.7 3-4.3 3-7.3 0-.7-.1-1.4-.2-2z"
-      />
-      <path
-        fill="#34A853"
-        d="M6.6 14.3 5.9 15l-2.5 2A9 9 0 0 0 12 21c2.4 0 4.5-.8 6-2.2l-3.2-2.5c-.8.6-1.9.9-2.8.9-2.3 0-4.2-1.5-4.9-3.6z"
-      />
-      <path fill="#FBBC05" d="M3.4 7A9 9 0 0 0 3.4 17l3.2-2.5a5.4 5.4 0 0 1 0-3.4z" />
-      <path
-        fill="#4285F4"
-        d="M12 6.6c1.3 0 2.5.5 3.4 1.3l2.6-2.6A9 9 0 0 0 3.4 7l3.2 2.5C7.3 7.4 9.5 6.6 12 6.6z"
-      />
-    </svg>
   );
 }

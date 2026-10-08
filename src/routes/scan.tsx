@@ -1,12 +1,16 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { Check, CircleAlert, RefreshCw, SwitchCamera, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Backdrop } from "@/components/vv/app-shell";
 import { scanStages } from "@/lib/vitals";
+import { getCurrentUser } from "@/lib/auth";
 import { captureVision, type VisionCaptureResult } from "@/lib/vision-vitals";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/scan")({
+  beforeLoad: async () => {
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
+  },
   head: () => ({
     meta: [
       { title: "Live AI scan — VisionVitals AI" },
@@ -56,10 +60,14 @@ function ScanScreen() {
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const imageBlob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("The camera image could not be created."));
-      }, "image/jpeg", 0.9);
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("The camera image could not be created."));
+        },
+        "image/jpeg",
+        0.9,
+      );
     });
     const image = new File([imageBlob], "vision-vitals-camera.jpg", {
       type: "image/jpeg",
@@ -195,9 +203,7 @@ function ScanScreen() {
             <div className="absolute inset-0 grid place-items-center px-8 text-center">
               <div>
                 <CircleAlert className="mx-auto size-6 text-warning" />
-                <p className="mt-3 text-sm text-muted-foreground">
-                  {cameraError || captureError}
-                </p>
+                <p className="mt-3 text-sm text-muted-foreground">{cameraError || captureError}</p>
               </div>
             </div>
           ) : null}

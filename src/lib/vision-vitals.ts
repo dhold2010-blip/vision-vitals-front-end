@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireUserAccessToken } from "@/lib/auth";
 
 export type VisionCaptureResult = {
   capture: {
@@ -50,8 +51,8 @@ function getRequiredEnvironment(name: string): string {
 }
 
 function getSafeError(response: Response, payload: unknown): Error {
-  const backendError = (payload as BackendErrorPayload)?.data
-    ?? (payload as BackendErrorPayload)?.detail;
+  const backendError =
+    (payload as BackendErrorPayload)?.data ?? (payload as BackendErrorPayload)?.detail;
   const code = backendError?.code;
 
   if (code === "RECAPTURE_REQUIRED") {
@@ -90,6 +91,7 @@ export const captureVision = createServerFn({ method: "POST" })
     return data;
   })
   .handler<VisionCaptureResult>(async ({ data }) => {
+    const userAccessToken = await requireUserAccessToken();
     const backendUrl = getRequiredEnvironment("VISION_VITALS_BACKEND_URL");
     const deviceId = getRequiredEnvironment("VISION_VITALS_DEVICE_ID");
     const deviceCredential = getRequiredEnvironment("VISION_VITALS_DEVICE_CREDENTIAL");
@@ -128,6 +130,7 @@ export const captureVision = createServerFn({ method: "POST" })
     const captureResponse = await fetch(captureUrl, {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${userAccessToken}`,
         "X-Device-Session": sessionToken,
         "Idempotency-Key": crypto.randomUUID(),
       },
