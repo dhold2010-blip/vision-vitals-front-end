@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireUserAccessToken } from "@/lib/auth";
-import { getRegisteredBrowserDevice } from "@/lib/devices";
+
 
 export type VisionCaptureResult = {
   capture: {
@@ -94,7 +94,7 @@ export const captureVision = createServerFn({ method: "POST" })
   .handler<VisionCaptureResult>(async ({ data }) => {
     const userAccessToken = await requireUserAccessToken();
     const backendUrl = getRequiredEnvironment("VISION_VITALS_BACKEND_URL");
-    const { deviceId, deviceSecret: deviceCredential } = await getRegisteredBrowserDevice();
+    const { deviceId, deviceSecret: deviceCredential } = await (await import("./devices.server")).getRegisteredBrowserDevice();
     const baseUrl = backendUrl.replace(/\/$/, "");
 
     const authenticationUrl = `${baseUrl}/api/v1/devices/${encodeURIComponent(deviceId)}/authenticate`;
