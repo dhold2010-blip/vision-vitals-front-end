@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Format changed frontend files
-        run: npx prettier --write src/lib/records.ts src/routes/index.tsx src/routes/history.tsx src/routes/profile.tsx src/routes/reports.tsx src/routes/results.tsx src/routes/scan.tsx src/routes/settings.tsx
+        run: npx prettier --write src/lib/records.ts src/lib/devices.ts src/lib/devices.server.ts src/lib/vision-vitals.ts src/routes/index.tsx src/routes/history.tsx src/routes/profile.tsx src/routes/reports.tsx src/routes/results.tsx src/routes/scan.tsx src/routes/settings.tsx
       - name: Run ESLint
         run: npm run lint
       - name: Build frontend
