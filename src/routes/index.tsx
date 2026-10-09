@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { getCurrentUser } from "@/lib/auth";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { ArrowUpRight, ClipboardList, ScanFace, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/vv/app-shell";
@@ -6,6 +7,9 @@ import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
 import { getMyProfile, listAnalyses } from "@/lib/records";
 
 export const Route = createFileRoute("/")({
+  beforeLoad: async () => {
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
+  },
   loader: async () => {
     const [profile, analyses] = await Promise.all([getMyProfile(), listAnalyses()]);
     return { profile, analyses };
