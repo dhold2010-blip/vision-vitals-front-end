@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { getCurrentUser } from "@/lib/auth";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -7,6 +8,9 @@ import { GlassCard } from "@/components/vv/glass-card";
 import { deleteAnalysis, listAnalyses, type AnalysisRecord } from "@/lib/records";
 
 export const Route = createFileRoute("/history")({
+  beforeLoad: async () => {
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
+  },
   loader: () => listAnalyses(),
   head: () => ({
     meta: [
