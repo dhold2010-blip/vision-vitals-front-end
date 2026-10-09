@@ -101,7 +101,7 @@ function ScanScreen() {
         }
       } catch {
         if (!cancelled)
-          setCameraError("Camera access is blocked. You can still run a simulated scan.");
+          setCameraError("Camera access is blocked. Allow camera access in your browser settings and try again.");
       }
     }
     void start();
