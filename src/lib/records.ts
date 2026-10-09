@@ -36,22 +36,18 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init.headers,
     },
   });
-  const payload = (await response.json().catch(() => null)) as
-    | Envelope<T>
-    | { error?: { message?: string }; detail?: string }
-    | null;
+  const payload = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
+    const errorPayload = payload as { error?: { message?: string }; detail?: string } | null;
     if (response.status === 401) throw new Error("Your session expired. Please sign in again.");
     if (response.status === 404) throw new Error("That record could not be found.");
     if (response.status >= 500) throw new Error("VisionVitals is temporarily unavailable. Please try again.");
-    throw new Error(
-      ("error" in (payload ?? {}) && payload?.error?.message) ||
-        ("detail" in (payload ?? {}) && payload?.detail) ||
-        "VisionVitals could not complete that request.",
-    );
+    throw new Error(errorPayload?.error?.message || errorPayload?.detail || "VisionVitals could not complete that request.");
   }
-  if (!payload || !("data" in payload)) throw new Error("VisionVitals returned an invalid response.");
-  return payload.data;
+  if (typeof payload !== "object" || payload === null || !("data" in payload)) {
+    throw new Error("VisionVitals returned an invalid response.");
+  }
+  return (payload as Envelope<T>).data;
 }
 
 export const listAnalyses = createServerFn({ method: "GET" })
