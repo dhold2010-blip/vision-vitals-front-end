@@ -1,4 +1,5 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { getCurrentUser } from "@/lib/auth";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, FileText, LogOut, ShieldCheck, Smartphone, UserRound } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -8,6 +9,9 @@ import { getMyProfile } from "@/lib/records";
 import { logoutAccount } from "@/lib/auth";
 
 export const Route = createFileRoute("/settings")({
+  beforeLoad: async () => {
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
+  },
   loader: () => getMyProfile(),
   head: () => ({
     meta: [
