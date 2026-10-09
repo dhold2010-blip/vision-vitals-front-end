@@ -1,10 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { getCurrentUser } from "@/lib/auth";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Activity, AlertTriangle, FileText } from "lucide-react";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
 import { listAnalyses } from "@/lib/records";
 
 export const Route = createFileRoute("/reports")({
+  beforeLoad: async () => {
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
+  },
   loader: () => listAnalyses(),
   head: () => ({
     meta: [
