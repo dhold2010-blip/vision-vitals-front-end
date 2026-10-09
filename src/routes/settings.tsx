@@ -1,18 +1,22 @@
 import { getCurrentUser } from "@/lib/auth";
-import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { ChevronRight, FileText, LogOut, ShieldCheck, Smartphone, UserRound } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
 import { getMyProfile } from "@/lib/records";
+import { listMyDevices, registerBrowserDevice, revokeMyDevice } from "@/lib/devices";
 import { logoutAccount } from "@/lib/auth";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: async () => {
     if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
   },
-  loader: () => getMyProfile(),
+  loader: async () => {
+    const [account, devices] = await Promise.all([getMyProfile(), listMyDevices()]);
+    return { account, devices };
+  },
   head: () => ({
     meta: [
       { title: "Settings — VisionVitals AI" },
@@ -26,10 +30,43 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsScreen() {
-  const { user, profile } = Route.useLoaderData();
+  const { account, devices } = Route.useLoaderData();
+  const { user, profile } = account;
   const navigate = useNavigate();
+  const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
   const displayName = profile.display_name?.trim() || user.email;
+
+  async function registerThisBrowser() {
+    if (registering) return;
+    setRegistering(true);
+    try {
+      const result = await registerBrowserDevice();
+      toast.success(result.alreadyRegistered ? "This browser is already registered." : "This browser is now registered for camera scans.");
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not register this browser.");
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  async function revokeDevice(id: string) {
+    if (revoking) return;
+    if (!window.confirm("Revoke scan access for this device? This cannot be undone.")) return;
+    setRevoking(id);
+    try {
+      await revokeMyDevice({ data: { id } });
+      toast.success("Device access revoked.");
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not revoke this device.");
+    } finally {
+      setRevoking(null);
+    }
+  }
 
   async function signOut() {
     if (signingOut) return;
@@ -80,6 +117,46 @@ function SettingsScreen() {
           </span>
           <ChevronRight className="size-4 text-muted-foreground" />
         </Link>
+      </GlassCard>
+
+      <SectionTitle className="mt-8 mb-3" title="Trusted scan devices" />
+      <GlassCard className="p-5">
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Register this browser explicitly before scanning. Each registration belongs to your account, and you can revoke it here. Registering a browser does not approve other browsers or devices.
+        </p>
+        <button
+          type="button"
+          disabled={registering}
+          onClick={() => void registerThisBrowser()}
+          className="press mt-4 w-full rounded-2xl aurora px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          {registering ? "Registering…" : "Register this browser"}
+        </button>
+        <div className="mt-4 grid gap-3">
+          {devices.length ? devices.map((device) => (
+            <div key={device.id} className="flex items-start gap-3 rounded-xl border border-white/10 p-3">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-secondary" />
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-sm font-medium">{device.device_name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {device.status} · registered {new Date(device.created_at).toLocaleDateString()}
+                </p>
+              </div>
+              {device.status !== "REVOKED" ? (
+                <button
+                  type="button"
+                  disabled={revoking !== null}
+                  onClick={() => void revokeDevice(device.id)}
+                  className="text-xs font-semibold text-destructive disabled:opacity-50"
+                >
+                  {revoking === device.id ? "Revoking…" : "Revoke"}
+                </button>
+              ) : null}
+            </div>
+          )) : (
+            <p className="text-xs text-muted-foreground">No devices registered to this account yet.</p>
+          )}
+        </div>
       </GlassCard>
 
       <SectionTitle className="mt-8 mb-3" title="Privacy and installation" />
