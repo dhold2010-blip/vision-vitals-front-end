@@ -28,5 +28,5 @@ The web app uses the same HTTPS frontend URL and backend API. This is a Progress
 - The manifest does not add offline storage or cache private health pages.
 - Do not add service-worker caching for authenticated HTML, health data, camera images, or API responses without a separate security review.
 - Installability does not itself enforce approval of each device. The backend's existing device registration/revocation endpoints must be inspected and an explicit user-device approval workflow verified or implemented before describing the product as restricted to approved devices.
-- Existing dashboard/history/report/profile screens contain seeded example values. Those must be replaced with backend-backed records before treating them as a source of truth.
+- Dashboard, history, reports, profile, and settings now read the backend-supported account data in this branch. The backend currently exposes analysis observations and account profile fields, not verified body-composition, weight, heart-rate, posture, or health-score time series; the frontend intentionally does not fabricate those values.
 - Do not run database resets or migrations for this PWA change.
