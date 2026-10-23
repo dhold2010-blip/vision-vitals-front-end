@@ -1,199 +1,49 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Download, Share2, Sparkles } from "lucide-react";
-import { useState } from "react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { toast } from "sonner";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
-import { Chip, GlassCard, SectionTitle } from "@/components/vv/glass-card";
-import { compositionSplit, monthlyTrend, weeklyTrend } from "@/lib/vitals";
+import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
+import { getCurrentUser } from "@/lib/auth";
+import { getMyAnalyses, type VisionAnalysis } from "@/lib/vision-vitals";
 
 export const Route = createFileRoute("/reports")({
-  head: () => ({
-    meta: [
-      { title: "Progress reports — VisionVitals AI" },
-      {
-        name: "description",
-        content:
-          "Weekly and monthly progress charts for your health score, posture, resting heart rate and weight, with an AI written summary.",
-      },
-      { property: "og:title", content: "Progress reports — VisionVitals AI" },
-      {
-        property: "og:description",
-        content: "Charts and AI summaries of your body analysis trends.",
-      },
-    ],
-  }),
+  beforeLoad: async () => {
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
+  },
+  head: () => ({ meta: [{ title: "Progress reports — VisionVitals AI" }, { name: "description", content: "Review analyses saved to your account." }] }),
   component: Reports,
 });
 
-const tooltipStyle = {
-  background: "color-mix(in oklab, var(--color-background) 90%, transparent)",
-  border: "1px solid var(--color-border)",
-  borderRadius: 14,
-  fontSize: 12,
-  color: "var(--color-foreground)",
-} as const;
-
 function Reports() {
-  const [range, setRange] = useState<"Weekly" | "Monthly">("Weekly");
+  const [records, setRecords] = useState<VisionAnalysis[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    getMyAnalyses().then((items) => active && setRecords(items)).catch((e: unknown) => active && setError(e instanceof Error ? e.message : "Could not load reports.")).finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, []);
+  const completed = records.filter((item) => item.status.toLowerCase() === "completed");
+  const withObservations = records.filter((item) => Boolean(item.result?.observation));
+  const dates = records.map((item) => new Date(item.created_at)).filter((date) => !Number.isNaN(date.getTime()));
+  const first = dates.length ? Math.min(...dates.map((date) => date.getTime())) : null;
+  const latest = dates.length ? Math.max(...dates.map((date) => date.getTime())) : null;
 
   return (
     <AppShell>
-      <PageHeader
-        eyebrow="Analytics"
-        title="Reports"
-        subtitle="How your body is trending over time"
-      />
-
-      <div className="mb-4 flex gap-2">
-        {(["Weekly", "Monthly"] as const).map((r) => (
-          <Chip key={r} active={r === range} onClick={() => setRange(r)}>
-            {r}
-          </Chip>
-        ))}
+      <PageHeader eyebrow="Account analytics" title="Reports" subtitle="Only saved analyses from your account are included." />
+      {error ? <GlassCard className="border border-destructive/40 p-4"><p className="text-sm text-destructive">{error}</p><button type="button" onClick={() => window.location.reload()} className="mt-2 text-sm font-semibold text-secondary">Try again</button></GlassCard> : null}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <GlassCard className="p-5"><p className="text-xs text-muted-foreground">Saved analyses</p><p className="mt-2 text-2xl font-bold tabular-nums">{loading ? "—" : records.length}</p></GlassCard>
+        <GlassCard className="p-5"><p className="text-xs text-muted-foreground">Completed</p><p className="mt-2 text-2xl font-bold tabular-nums">{loading ? "—" : completed.length}</p></GlassCard>
+        <GlassCard className="col-span-2 p-5 sm:col-span-1"><p className="text-xs text-muted-foreground">With observations</p><p className="mt-2 text-2xl font-bold tabular-nums">{loading ? "—" : withObservations.length}</p></GlassCard>
       </div>
-
-      <GlassCard className="animate-scale-in p-5">
-        <div className="flex items-baseline justify-between">
-          <p className="text-sm font-semibold">Health score</p>
-          <p className="text-xs text-success">+8 this {range === "Weekly" ? "week" : "quarter"}</p>
-        </div>
-        <div className="mt-4 h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={range === "Weekly" ? weeklyTrend : monthlyTrend}>
-              <defs>
-                <linearGradient id="scoreFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.65} />
-                  <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="var(--color-border)" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tickLine={false}
-                axisLine={false}
-                fontSize={11}
-                stroke="var(--color-muted-foreground)"
-              />
-              <YAxis
-                width={28}
-                tickLine={false}
-                axisLine={false}
-                fontSize={11}
-                stroke="var(--color-muted-foreground)"
-                domain={[60, 100]}
-              />
-              <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "var(--color-secondary)" }} />
-              <Area
-                type="monotone"
-                dataKey="score"
-                stroke="var(--color-chart-2)"
-                strokeWidth={2.5}
-                fill="url(#scoreFill)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </GlassCard>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <GlassCard className="p-5">
-          <p className="text-sm font-semibold">Posture vs resting HR</p>
-          <div className="mt-4 h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyTrend} barGap={4}>
-                <CartesianGrid stroke="var(--color-border)" vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  fontSize={11}
-                  stroke="var(--color-muted-foreground)"
-                />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-                <Bar dataKey="posture" fill="var(--color-chart-1)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="hr" fill="var(--color-chart-3)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-5">
-          <p className="text-sm font-semibold">Body composition</p>
-          <div className="mt-2 flex items-center gap-4">
-            <div className="h-40 w-40">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={compositionSplit}
-                    dataKey="value"
-                    nameKey="label"
-                    innerRadius={44}
-                    outerRadius={64}
-                    paddingAngle={3}
-                    stroke="none"
-                  >
-                    {compositionSplit.map((c) => (
-                      <Cell key={c.label} fill={c.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={tooltipStyle} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <ul className="grid gap-2.5">
-              {compositionSplit.map((c) => (
-                <li key={c.label} className="flex items-center gap-2 text-xs">
-                  <span className="size-2.5 rounded-full" style={{ background: c.color }} />
-                  <span className="text-muted-foreground">{c.label}</span>
-                  <span className="font-semibold tabular-nums">{c.value}%</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </GlassCard>
-      </div>
-
-      <SectionTitle className="mt-8 mb-3" title="AI summary" />
+      <SectionTitle className="mt-8 mb-3" title="Your timeline" />
       <GlassCard className="p-5">
-        <Sparkles className="size-4 text-accent" />
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          Over the last five weeks your health score climbed from 68 to 86 while measured weight
-          fell 1.9 kg. The strongest driver was posture, up 10 points after your forward head
-          carriage narrowed from 19° to 12°. Resting heart rate is trending down at roughly 1 bpm
-          per week, which usually follows improved sleep consistency. Keep the current cadence and
-          your projected score for next month is 89.
-        </p>
-        <div className="mt-5 flex gap-3">
-          <button
-            type="button"
-            onClick={() => toast.success("Downloading monthly-report.pdf")}
-            className="press flex flex-1 items-center justify-center gap-2 rounded-2xl aurora py-3 text-sm font-semibold text-primary-foreground"
-          >
-            <Download className="size-4" /> Download PDF
-          </button>
-          <button
-            type="button"
-            onClick={() => toast("Share link copied")}
-            className="press glass flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-medium"
-          >
-            <Share2 className="size-4" /> Share
-          </button>
-        </div>
+        {loading ? <p className="text-sm text-muted-foreground">Loading your report data…</p> : records.length ? <div className="grid gap-4 sm:grid-cols-2"><div><p className="text-xs text-muted-foreground">First saved analysis</p><p className="mt-1 text-sm font-semibold">{first === null ? "—" : new Date(first).toLocaleString()}</p></div><div><p className="text-xs text-muted-foreground">Most recent analysis</p><p className="mt-1 text-sm font-semibold">{latest === null ? "—" : new Date(latest).toLocaleString()}</p></div></div> : <p className="text-sm leading-relaxed text-muted-foreground">There are no saved analyses to chart yet. After a successful scan, this report will update with data from your account. We do not invent health scores, body measurements, or trends.</p>}
       </GlassCard>
+      <SectionTitle className="mt-8 mb-3" title="Analysis observations" />
+      {withObservations.length ? <ul className="grid gap-3">{withObservations.slice(0, 10).map((item) => <li key={item.id}><GlassCard className="p-4"><p className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString()} · {item.status}</p><p className="mt-2 text-sm leading-relaxed">{item.result?.observation}</p>{item.result?.confidence != null ? <p className="mt-2 text-xs text-secondary">Confidence {Math.round(item.result.confidence * 100)}%</p> : null}</GlassCard></li>)}</ul> : <GlassCard className="p-5"><Sparkles className="size-4 text-accent" /><p className="mt-3 text-sm text-muted-foreground">Your analysis observations will appear here when the backend has saved them.</p><Link to="/scan" className="mt-3 inline-block text-sm font-semibold text-secondary">Start a scan</Link></GlassCard>}
     </AppShell>
   );
 }
