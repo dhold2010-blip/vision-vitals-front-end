@@ -1,171 +1,92 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowUpRight, Bell, Flame, Heart, Ruler, Sparkles, Waves, Weight } from "lucide-react";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { ArrowUpRight, Bell, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/vv/app-shell";
 import { Chip, GlassCard, SectionTitle } from "@/components/vv/glass-card";
-import { ProgressBar, ProgressRing } from "@/components/vv/progress";
-import { aiTips, history, latestScan, profile } from "@/lib/vitals";
+import { getCurrentUser } from "@/lib/auth";
+import { getMyAnalyses, getMyProfile, type MyProfile, type VisionAnalysis } from "@/lib/vision-vitals";
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "VisionVitals AI — Camera-based body & health analysis" },
-      {
-        name: "description",
-        content:
-          "Stand in front of your camera and let VisionVitals AI estimate age, BMI, posture, symmetry and heart rate with a full health score.",
-      },
-      { property: "og:title", content: "VisionVitals AI — Camera-based body & health analysis" },
-      {
-        property: "og:description",
-        content: "A premium AI health scanner: instant body analysis, trends and reports.",
-      },
-    ],
-  }),
+  beforeLoad: async () => {
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
+  },
+  head: () => ({ meta: [
+    { title: "VisionVitals AI — Camera-based analysis" },
+    { name: "description", content: "Your private VisionVitals account and saved camera analyses." },
+  ] }),
   component: Home,
 });
 
-const quick = [
-  { icon: Ruler, label: "Height", value: `${latestScan.height} cm` },
-  { icon: Weight, label: "Weight", value: `${latestScan.weight} kg` },
-  { icon: Heart, label: "Resting HR", value: `${latestScan.heartRate} bpm` },
-  { icon: Waves, label: "Hydration", value: `${latestScan.hydration}%` },
+const aiTips = [
+  "Use bright, even lighting and keep the camera steady.",
+  "Make sure the photo is clear and the subject is fully in frame.",
+  "Review each analysis carefully; camera estimates are not a medical diagnosis.",
 ];
+function dateLabel(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
 
 function Home() {
-  const [greeting, setGreeting] = useState("Welcome back");
+  const [profile, setProfile] = useState<MyProfile | null>(null);
+  const [analyses, setAnalyses] = useState<VisionAnalysis[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    const hour = new Date().getHours();
-    setGreeting(hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening");
+    let active = true;
+    Promise.all([getMyProfile(), getMyAnalyses()])
+      .then(([p, scans]) => {
+        if (!active) return;
+        setProfile(p);
+        setAnalyses(scans);
+      })
+      .catch((e: unknown) => active && setError(e instanceof Error ? e.message : "Could not load your account data."))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
   }, []);
+
+  const name = profile?.profile.display_name?.trim() || "there";
+  const initials = profile?.profile.display_name?.trim()
+    ? profile.profile.display_name.trim().split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()
+    : "VV";
+  const latest = analyses[0];
 
   return (
     <AppShell>
       <div className="animate-rise flex items-center justify-between">
         <Link to="/profile" className="press flex items-center gap-3">
-          <span className="grid size-12 place-items-center rounded-2xl aurora text-base font-bold text-primary-foreground">
-            {profile.name
-              .split(" ")
-              .map((n) => n[0])
-              .join("")}
-          </span>
-          <span className="text-left">
-            <span className="block text-xs text-muted-foreground">{greeting},</span>
-            <span className="block text-[17px] font-semibold tracking-tight">{profile.name}</span>
-          </span>
+          <span className="grid size-12 place-items-center rounded-2xl aurora text-base font-bold text-primary-foreground">{initials}</span>
+          <span className="text-left"><span className="block text-xs text-muted-foreground">Welcome,</span><span className="block text-[17px] font-semibold tracking-tight">{name}</span></span>
         </Link>
-        <div className="flex items-center gap-2">
-          <span className="glass flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold">
-            <Flame className="size-3.5 text-warning" />
-            {profile.streak}
-          </span>
-          <button
-            type="button"
-            aria-label="Notifications"
-            className="press glass grid size-10 place-items-center rounded-full"
-          >
-            <Bell className="size-4" />
-          </button>
-        </div>
+        <span className="glass grid size-10 place-items-center rounded-full" aria-label="Notifications"><Bell className="size-4" /></span>
       </div>
 
-      <GlassCard className="animate-scale-in mt-6 overflow-hidden p-6 [animation-delay:80ms]">
-        <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
-          <ProgressRing
-            value={latestScan.score}
-            size={168}
-            caption="Health score"
-            gradientId="home-ring"
-          />
-          <div className="flex-1">
-            <p className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">
-              {latestScan.capturedAt}
-            </p>
-            <p className="mt-2 text-lg leading-snug font-semibold">
-              You are up <span className="text-success">{latestScan.delta} points</span> this week.
-            </p>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              Posture and resting heart rate carried the gain. Confidence {latestScan.confidence}%.
-            </p>
-            <div className="mt-5 grid gap-3">
-              <ProgressBar value={latestScan.posture} label="Posture" tone="secondary" />
-              <ProgressBar value={latestScan.symmetry} label="Face symmetry" tone="accent" />
-            </div>
-          </div>
+      {error ? <GlassCard className="mt-5 border border-destructive/40 p-4"><p className="text-sm text-destructive">{error}</p><button type="button" onClick={() => window.location.reload()} className="mt-2 text-sm font-semibold text-secondary">Reload</button></GlassCard> : null}
+
+      <GlassCard className="animate-scale-in mt-6 overflow-hidden p-6">
+        <p className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">Your account overview</p>
+        <p className="mt-3 text-2xl font-bold tracking-tight">{loading ? "Loading your scans…" : `${analyses.length} saved ${analyses.length === 1 ? "analysis" : "analyses"}`}</p>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{latest ? `Latest analysis: ${dateLabel(latest.created_at)} · status ${latest.status}.` : "Your dashboard will show real scan results here after your first successful analysis."}</p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link to="/scan" className="press inline-flex items-center gap-2 rounded-2xl aurora px-4 py-3 text-sm font-semibold text-primary-foreground"><Sparkles className="size-4" /> Start a scan <ArrowUpRight className="size-4" /></Link>
+          <Link to="/profile" className="press glass inline-flex items-center rounded-2xl px-4 py-3 text-sm font-semibold">Edit profile</Link>
         </div>
       </GlassCard>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {quick.map(({ icon: Icon, label, value }, i) => (
-          <GlassCard key={label} className="animate-rise p-4" interactive>
-            <div style={{ animationDelay: `${120 + i * 60}ms` }}>
-              <Icon className="size-4 text-secondary" />
-              <p className="mt-3 text-lg font-bold tracking-tight tabular-nums">{value}</p>
-              <p className="text-[11px] text-muted-foreground">{label}</p>
-            </div>
-          </GlassCard>
-        ))}
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <GlassCard className="p-4"><p className="text-xs text-muted-foreground">Account</p><p className="mt-2 text-sm font-semibold">{profile?.user.is_active ? "Active" : loading ? "Loading…" : "Unavailable"}</p></GlassCard>
+        <GlassCard className="p-4"><p className="text-xs text-muted-foreground">Saved scans</p><p className="mt-2 text-lg font-bold tabular-nums">{loading ? "—" : analyses.length}</p></GlassCard>
+        <GlassCard className="col-span-2 p-4 sm:col-span-1"><p className="text-xs text-muted-foreground">Profile name</p><p className="mt-2 truncate text-sm font-semibold">{profile?.profile.display_name || "Not set"}</p></GlassCard>
       </div>
 
-      <GlassCard className="animate-rise mt-4 flex items-center gap-4 p-5" interactive>
-        <Link to="/scan" className="flex flex-1 items-center gap-4">
-          <span className="relative grid size-14 shrink-0 place-items-center rounded-2xl aurora">
-            <span className="animate-pulse-ring absolute inset-0 rounded-2xl border border-secondary/50" />
-            <Sparkles className="size-6 text-primary-foreground" />
-          </span>
-          <span>
-            <span className="block text-[15px] font-semibold">Start a quick scan</span>
-            <span className="block text-xs text-muted-foreground">
-              14 seconds · full body and face analysis
-            </span>
-          </span>
-          <ArrowUpRight className="ml-auto size-5 text-muted-foreground" />
-        </Link>
-      </GlassCard>
-
-      <SectionTitle
-        className="mt-8 mb-3"
-        title="AI tips for you"
-        action={<span className="text-xs text-secondary">Updated daily</span>}
-      />
+      <SectionTitle className="mt-8 mb-3" title="Scan tips" action={<span className="text-xs text-secondary">For better captures</span>} />
       <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-1 sm:mx-0 sm:px-0">
-        {aiTips.map((tip) => (
-          <GlassCard key={tip} className="w-[250px] shrink-0 snap-start p-5">
-            <Sparkles className="size-4 text-accent" />
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{tip}</p>
-          </GlassCard>
-        ))}
+        {aiTips.map((tip) => <GlassCard key={tip} className="w-[250px] shrink-0 snap-start p-5"><Sparkles className="size-4 text-accent" /><p className="mt-3 text-sm leading-relaxed text-muted-foreground">{tip}</p></GlassCard>)}
       </div>
 
-      <SectionTitle
-        className="mt-8 mb-3"
-        title="Recent reports"
-        action={
-          <Link to="/history" className="text-xs font-medium text-secondary">
-            See all
-          </Link>
-        }
-      />
-      <ul className="grid gap-3">
-        {history.slice(0, 3).map((scan) => (
-          <GlassCard as="li" key={scan.id} className="p-4" interactive>
-            <Link to="/results" className="flex items-center gap-4">
-              <ProgressRing value={scan.score} size={54} stroke={5} gradientId={`ring-${scan.id}`}>
-                <span className="text-sm font-bold tabular-nums">{scan.score}</span>
-              </ProgressRing>
-              <div className="flex-1">
-                <p className="text-sm font-semibold">
-                  {scan.date} · {scan.time}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  BMI {scan.bmi} · {scan.weight} kg · {scan.heartRate} bpm
-                </p>
-              </div>
-              <Chip>{scan.tag}</Chip>
-            </Link>
-          </GlassCard>
-        ))}
-      </ul>
+      <SectionTitle className="mt-8 mb-3" title="Recent analyses" action={<Link to="/history" className="text-xs font-medium text-secondary">See all</Link>} />
+      {analyses.length ? <ul className="grid gap-3">{analyses.slice(0, 3).map((scan) => <GlassCard as="li" key={scan.id} className="p-4" interactive><Link to="/results" state={{ result: { analysis: scan } }} className="flex items-start gap-3"><span className="mt-1 size-2.5 shrink-0 rounded-full bg-secondary" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{dateLabel(scan.created_at)}</span><span className="mt-1 block text-xs text-muted-foreground">Status: {scan.status}</span><span className="mt-2 block line-clamp-2 text-sm">{scan.result?.observation || "No observation saved."}</span></span><Chip>{scan.status}</Chip></Link></GlassCard>)}</ul> : <GlassCard className="p-6 text-center"><p className="text-sm font-semibold">{loading ? "Loading analyses…" : "No analyses yet"}</p><p className="mt-1 text-xs text-muted-foreground">Only scans saved to your account will appear here.</p></GlassCard>}
     </AppShell>
   );
 }
