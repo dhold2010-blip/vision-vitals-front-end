@@ -1,8 +1,30 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireUserAccessToken } from "@/lib/auth";
 
+export type VisionAnalysis = {
+  id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  result: {
+    provider: string;
+    model: string;
+    observation: string;
+    result_status: string;
+    confidence: number | null;
+    warnings: string[];
+    limitations: string[];
+    request_id: string;
+  } | null;
+};
+
 export type VisionCaptureResult = {
-  capture: {
+  id?: string;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+  result?: VisionAnalysis["result"];
+  capture?: {
     id: string;
     device_id: string;
     analysis_id: string | null;
@@ -12,138 +34,116 @@ export type VisionCaptureResult = {
     created_at: string;
     completed_at: string | null;
   };
-  analysis: {
-    id: string;
-    status: string;
-    created_at: string;
-    updated_at: string;
-    result: {
-      provider: string;
-      model: string;
-      observation: string;
-      result_status: string;
-      confidence: number | null;
-      warnings: string[];
-      limitations: string[];
-      request_id: string;
-    } | null;
-  } | null;
-  duplicate: boolean;
+  analysis?: VisionAnalysis | null;
+  duplicate?: boolean;
 };
 
-type ServerFunctionError = {
-  code?: string;
-  message?: string;
+export type MyProfile = {
+  user: { id: string; email: string; role: "USER" | "ADMIN"; is_active: boolean; created_at: string };
+  profile: { display_name: string | null; timezone: string | null };
 };
 
-type BackendErrorPayload = {
-  data?: ServerFunctionError;
-  detail?: ServerFunctionError;
-  message?: string;
-};
+type Envelope<T> = { success?: boolean; data?: T; error?: { code?: string; message?: string }; detail?: unknown };
 
-function getRequiredEnvironment(name: string): string {
-  const value = process.env[name];
-  if (!value?.trim()) {
-    throw new Error(`VisionVitals server configuration is missing: ${name}`);
-  }
-  return value.trim();
-}
-
-function getSafeError(response: Response, payload: unknown): Error {
-  const backendError =
-    (payload as BackendErrorPayload)?.data ?? (payload as BackendErrorPayload)?.detail;
-  const code = backendError?.code;
-
-  if (code === "RECAPTURE_REQUIRED") {
-    return new Error("The scan requires another capture. Please retry the scan.");
-  }
-  if (code === "AUTHENTICATION_FAILED" || response.status >= 401) {
-    return new Error("VisionVitals device authentication failed. Please retry later.");
-  }
-  if (response.status >= 500) {
-    return new Error("The VisionVitals analysis service is temporarily unavailable.");
-  }
-  if (response.status >= 400) {
-    return new Error("The backend rejected this scan. Please verify the camera image and retry.");
-  }
-
-  return new Error("VisionVitals could not complete the scan. Please try again.");
+function backendUrl(): string {
+  const value = process.env.VISION_VITALS_BACKEND_URL;
+  if (!value?.trim()) throw new Error("VisionVitals backend is not configured.");
+  return value.trim().replace(/\/$/, "");
 }
 
 async function parseJsonResponse(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type") || "";
-  if (!contentType.includes("application/json")) {
-    return { message: await response.text() };
-  }
+  if (!contentType.includes("application/json")) return { message: await response.text() };
   return response.json();
 }
 
+function safeError(response: Response, payload: unknown): Error {
+  const p = payload as Envelope<unknown> | null;
+  const detail = p?.error?.message || (typeof p?.detail === "string" ? p.detail : "");
+  if (response.status === 401) return new Error("Your session expired. Please sign in again.");
+  if (response.status === 413) return new Error("The image is too large. Please choose a smaller image.");
+  if (response.status === 422) return new Error(detail || "The image could not be validated. Try a clear, well-lit JPEG or PNG.");
+  if (response.status >= 500) return new Error("The VisionVitals analysis service is temporarily unavailable.");
+  return new Error(detail || "VisionVitals could not complete the request. Please try again.");
+}
+
+async function authenticatedJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = await requireUserAccessToken();
+  const response = await fetch(`${backendUrl()}${path}`, {
+    ...init,
+    headers: {
+      ...(init.body && typeof init.body === "string" ? { "Content-Type": "application/json" } : {}),
+      Authorization: `Bearer ${token}`,
+      ...init.headers,
+    },
+  });
+  const payload = (await parseJsonResponse(response)) as Envelope<T>;
+  if (!response.ok || payload?.data === undefined) throw safeError(response, payload);
+  return payload.data;
+}
+
+export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =>
+  authenticatedJson<MyProfile>("/api/v1/users/me"),
+);
+
+export const updateMyProfile = createServerFn({ method: "POST" })
+  .validator((data: unknown) => {
+    if (typeof data !== "object" || data === null) throw new Error("Enter a valid profile name.");
+    const display_name = "display_name" in data && typeof data.display_name === "string"
+      ? data.display_name.trim()
+      : "";
+    const timezone = "timezone" in data && typeof data.timezone === "string"
+      ? data.timezone.trim()
+      : "";
+    if (display_name.length > 120) throw new Error("Name must be 120 characters or fewer.");
+    if (timezone.length > 64) throw new Error("Time zone must be 64 characters or fewer.");
+    return { display_name, timezone };
+  })
+  .handler(async ({ data }) =>
+    authenticatedJson<MyProfile["profile"]>("/api/v1/users/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  );
+
+export const getMyAnalyses = createServerFn({ method: "GET" }).handler(async () =>
+  authenticatedJson<VisionAnalysis[]>("/api/v1/analyses?limit=100&offset=0"),
+);
+
+export const deleteMyAnalysis = createServerFn({ method: "POST" })
+  .validator((data: unknown) => {
+    if (typeof data !== "object" || data === null || !("id" in data) || typeof data.id !== "string" || !data.id.trim()) {
+      throw new Error("A valid scan ID is required.");
+    }
+    return { id: data.id };
+  })
+  .handler(async ({ data }) =>
+    authenticatedJson<{ deleted: boolean }>(`/api/v1/analyses/${encodeURIComponent(data.id)}`, {
+      method: "DELETE",
+    }),
+  );
+
 export const captureVision = createServerFn({ method: "POST" })
   .validator((data: unknown) => {
-    if (!(data instanceof FormData)) {
-      throw new Error("The scan image was not provided in a valid request.");
-    }
+    if (!(data instanceof FormData)) throw new Error("The scan image was not provided in a valid request.");
     const image = data.get("image");
     if (!(image instanceof File) || image.size === 0 || image.size > 20 * 1024 * 1024) {
       throw new Error("The scan image is missing, empty, or too large.");
     }
     return data;
   })
-  .handler<VisionCaptureResult>(async ({ data }) => {
-    const userAccessToken = await requireUserAccessToken();
-    const backendUrl = getRequiredEnvironment("VISION_VITALS_BACKEND_URL");
-    const deviceId = getRequiredEnvironment("VISION_VITALS_DEVICE_ID");
-    const deviceCredential = getRequiredEnvironment("VISION_VITALS_DEVICE_CREDENTIAL");
-    const baseUrl = backendUrl.replace(/\/$/, "");
-
-    const authenticationUrl = `${baseUrl}/api/v1/devices/${encodeURIComponent(deviceId)}/authenticate`;
-    const authResponse = await fetch(authenticationUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device_secret: deviceCredential }),
-    });
-    const authPayload = await parseJsonResponse(authResponse);
-    if (!authResponse.ok) {
-      throw getSafeError(authResponse, authPayload);
-    }
-
-    const sessionToken = (authPayload as { data?: { device_session_token?: string } }).data
-      ?.device_session_token;
-    if (!sessionToken) {
-      throw new Error("VisionVitals authentication returned no device session.");
-    }
-
-    const captureUrl = `${baseUrl}/api/v1/devices/${encodeURIComponent(deviceId)}/capture`;
+  .handler(async ({ data }) => {
+    const token = await requireUserAccessToken();
+    const image = data.get("image") as File;
     const formData = new FormData();
-    formData.append("image", data.get("image") as File, "vision-vitals-camera.jpg");
-    formData.append("capture_type", "APP_CAMERA");
-    formData.append(
-      "capture_metadata",
-      JSON.stringify({
-        image_source: "APP_CAMERA",
-        camera_type: "FRONTEND_CAMERA",
-        image_width: 1280,
-        image_height: 1920,
-      }),
-    );
-    const captureResponse = await fetch(captureUrl, {
+    formData.append("image", image, image.name || "vision-vitals-camera.jpg");
+    formData.append("source", "APP_CAMERA");
+    const response = await fetch(`${backendUrl()}/api/v1/analyses`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${userAccessToken}`,
-        "X-Device-Session": sessionToken,
-        "Idempotency-Key": crypto.randomUUID(),
-      },
+      headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
-    const capturePayload = await parseJsonResponse(captureResponse);
-    if (!captureResponse.ok) {
-      throw getSafeError(captureResponse, capturePayload);
-    }
-
-    const envelope = capturePayload as { data?: unknown };
-    if (!envelope.data || typeof envelope.data !== "object") {
-      throw new Error("VisionVitals returned an invalid response.");
-    }
-    return envelope.data as VisionCaptureResult;
+    const payload = await parseJsonResponse(response) as Envelope<VisionAnalysis>;
+    if (!response.ok || !payload?.data) throw safeError(response, payload);
+    return { analysis: payload.data } satisfies VisionCaptureResult;
   });
