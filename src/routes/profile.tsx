@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { ChevronLeft, Pencil, Target } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/profile")({
     ],
   }),
   beforeLoad: async () => {
-    if (!(await getCurrentUser())) throw (await import("@tanstack/react-router")).redirect({ to: "/auth" });
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
   },
   component: Profile,
 });
