@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ import { deleteMyAnalysis, getMyAnalyses, type VisionAnalysis } from "@/lib/visi
 export const Route = createFileRoute("/history")({
   head: () => ({ meta: [{ title: "Scan history — VisionVitals AI" }, { name: "description", content: "Your saved VisionVitals analyses." }] }),
   beforeLoad: async () => {
-    if (!(await getCurrentUser())) throw (await import("@tanstack/react-router")).redirect({ to: "/auth" });
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
   },
   component: History,
 });
