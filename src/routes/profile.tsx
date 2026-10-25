@@ -1,3 +1,4 @@
+import { requireAuthenticatedRoute } from "@/lib/route-auth";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, Pencil, Target } from "lucide-react";
 import { toast } from "sonner";
@@ -7,6 +8,7 @@ import { ProgressBar } from "@/components/vv/progress";
 import { profile } from "@/lib/vitals";
 
 export const Route = createFileRoute("/profile")({
+  beforeLoad: requireAuthenticatedRoute,
   head: () => ({
     meta: [
       { title: "Your profile — VisionVitals AI" },

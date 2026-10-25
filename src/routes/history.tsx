@@ -1,3 +1,4 @@
+import { requireAuthenticatedRoute } from "@/lib/route-auth";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Download, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -8,6 +9,7 @@ import { ProgressRing } from "@/components/vv/progress";
 import { history as seed } from "@/lib/vitals";
 
 export const Route = createFileRoute("/history")({
+  beforeLoad: requireAuthenticatedRoute,
   head: () => ({
     meta: [
       { title: "Scan history — VisionVitals AI" },

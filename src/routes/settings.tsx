@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { requireAuthenticatedRoute } from "@/lib/route-auth";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   Bell,
   ChevronRight,
@@ -15,9 +16,11 @@ import { toast } from "sonner";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
 import { profile } from "@/lib/vitals";
+import { logoutAccount } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({
+  beforeLoad: requireAuthenticatedRoute,
   head: () => ({
     meta: [
       { title: "Settings — VisionVitals AI" },
@@ -96,6 +99,7 @@ function Row({
 }
 
 function SettingsScreen() {
+  const navigate = useNavigate();
   const [dark, setDark] = useState(true);
   const [notify, setNotify] = useState(true);
   const [analytics, setAnalytics] = useState(false);
@@ -184,7 +188,15 @@ function SettingsScreen() {
 
       <button
         type="button"
-        onClick={() => toast("Signed out")}
+        onClick={async () => {
+          try {
+            await logoutAccount();
+            toast.success("Signed out");
+            await navigate({ to: "/auth", replace: true });
+          } catch {
+            toast.error("Could not sign out. Please try again.");
+          }
+        }}
         className="press glass mt-6 flex w-full items-center justify-center gap-2 rounded-3xl py-4 text-sm font-semibold text-destructive"
       >
         <LogOut className="size-4" /> Log out

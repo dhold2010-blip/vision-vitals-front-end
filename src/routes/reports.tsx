@@ -1,3 +1,4 @@
+import { requireAuthenticatedRoute } from "@/lib/route-auth";
 import { createFileRoute } from "@tanstack/react-router";
 import { Download, Share2, Sparkles } from "lucide-react";
 import { useState } from "react";
@@ -21,6 +22,7 @@ import { Chip, GlassCard, SectionTitle } from "@/components/vv/glass-card";
 import { compositionSplit, monthlyTrend, weeklyTrend } from "@/lib/vitals";
 
 export const Route = createFileRoute("/reports")({
+  beforeLoad: requireAuthenticatedRoute,
   head: () => ({
     meta: [
       { title: "Progress reports — VisionVitals AI" },
