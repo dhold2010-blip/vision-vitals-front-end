@@ -1,3 +1,4 @@
+import { requireAuthenticatedRoute } from "@/lib/route-auth";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpRight, Bell, Flame, Heart, Ruler, Sparkles, Waves, Weight } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -7,6 +8,7 @@ import { ProgressBar, ProgressRing } from "@/components/vv/progress";
 import { aiTips, history, latestScan, profile } from "@/lib/vitals";
 
 export const Route = createFileRoute("/")({
+  beforeLoad: requireAuthenticatedRoute,
   head: () => ({
     meta: [
       { title: "VisionVitals AI — Camera-based body & health analysis" },
