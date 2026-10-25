@@ -1,3 +1,4 @@
+import { requireAuthenticatedRoute } from "@/lib/route-auth";
 import { createFileRoute, Link, useLocation } from "@tanstack/react-router";
 import { ChevronDown, Download, Save, Share2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -16,6 +17,7 @@ declare module "@tanstack/history" {
 }
 
 export const Route = createFileRoute("/results")({
+  beforeLoad: requireAuthenticatedRoute,
   head: () => ({
     meta: [
       { title: "Scan results — VisionVitals AI" },
