@@ -1,3 +1,4 @@
+import { requireAuthenticatedRoute } from "@/lib/route-auth";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Bell,
@@ -18,6 +19,7 @@ import { profile } from "@/lib/vitals";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({
+  beforeLoad: requireAuthenticatedRoute,
   head: () => ({
     meta: [
       { title: "Settings — VisionVitals AI" },
