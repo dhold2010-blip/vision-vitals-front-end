@@ -1,197 +1,204 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  Bell,
-  ChevronRight,
-  FileText,
-  Globe,
-  LogOut,
-  Moon,
-  Ruler,
-  ShieldCheck,
-  CircleQuestionMark,
-} from "lucide-react";
+import { getCurrentUser } from "@/lib/auth";
+import { createFileRoute, Link, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { ChevronRight, FileText, LogOut, ShieldCheck, Smartphone, UserRound } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
-import { profile } from "@/lib/vitals";
-import { cn } from "@/lib/utils";
+import { LocalizedDate } from "@/components/vv/localized-date";
+import { getMyProfile } from "@/lib/records";
+import { listMyDevices, registerBrowserDevice, revokeMyDevice } from "@/lib/devices";
+import { logoutAccount } from "@/lib/auth";
 
 export const Route = createFileRoute("/settings")({
+  beforeLoad: async () => {
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
+  },
+  loader: async () => {
+    const [account, devices] = await Promise.all([getMyProfile(), listMyDevices()]);
+    return { account, devices };
+  },
   head: () => ({
     meta: [
       { title: "Settings — VisionVitals AI" },
       {
         name: "description",
-        content:
-          "Control appearance, notifications, privacy, language, measurement units and your account.",
+        content: "Manage your VisionVitals account, privacy information and installation.",
       },
-      { property: "og:title", content: "Settings — VisionVitals AI" },
-      { property: "og:description", content: "Appearance, privacy and account controls." },
     ],
   }),
   component: SettingsScreen,
 });
 
-function Switch({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "press relative h-7 w-12 rounded-full border transition-colors duration-300",
-        checked ? "border-transparent aurora" : "border-border bg-white/8",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 size-5.5 rounded-full bg-white shadow transition-all duration-300 ease-[var(--ease-smooth)]",
-          checked ? "left-[calc(100%-1.5rem)]" : "left-0.5",
-        )}
-      />
-    </button>
-  );
-}
-
-function Row({
-  icon: Icon,
-  label,
-  hint,
-  right,
-  onClick,
-}: {
-  icon: typeof Bell;
-  label: string;
-  hint?: string;
-  right?: React.ReactNode;
-  onClick?: () => void;
-}) {
-  const Comp = onClick ? "button" : "div";
-  return (
-    <Comp
-      {...(onClick ? { type: "button" as const, onClick } : {})}
-      className="flex w-full items-center gap-3.5 px-5 py-4 text-left"
-    >
-      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/6">
-        <Icon className="size-4 text-secondary" />
-      </span>
-      <span className="flex-1">
-        <span className="block text-sm font-medium">{label}</span>
-        {hint ? <span className="block text-xs text-muted-foreground">{hint}</span> : null}
-      </span>
-      {right ?? <ChevronRight className="size-4 text-muted-foreground" />}
-    </Comp>
-  );
-}
-
 function SettingsScreen() {
-  const [dark, setDark] = useState(true);
-  const [notify, setNotify] = useState(true);
-  const [analytics, setAnalytics] = useState(false);
-  const [metric, setMetric] = useState(true);
+  const { account, devices } = Route.useLoaderData();
+  const { user, profile } = account;
+  const navigate = useNavigate();
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const displayName = profile.display_name?.trim() || user.email;
+
+  async function registerThisBrowser() {
+    if (registering) return;
+    setRegistering(true);
+    try {
+      const result = await registerBrowserDevice();
+      toast.success(result.alreadyRegistered ? "This browser is already registered." : "This browser is now registered for camera scans.");
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not register this browser.");
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  async function revokeDevice(id: string) {
+    if (revoking) return;
+    if (!window.confirm("Revoke scan access for this device? This cannot be undone.")) return;
+    setRevoking(id);
+    try {
+      await revokeMyDevice({ data: { id } });
+      toast.success("Device access revoked.");
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not revoke this device.");
+    } finally {
+      setRevoking(null);
+    }
+  }
+
+  async function signOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      const result = await logoutAccount();
+      if (result.remoteInvalidated) {
+        toast.success("You have been signed out.");
+      } else {
+        toast.warning("Signed out on this browser, but server session revocation could not be confirmed.");
+      }
+      await navigate({ to: "/auth", replace: true });
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not sign out.");
+    } finally {
+      setSigningOut(false);
+    }
+  }
 
   return (
     <AppShell>
-      <PageHeader
-        eyebrow="Preferences"
-        title="Settings"
-        subtitle={`${profile.plan} · renews 12 Apr`}
-      />
+      <PageHeader eyebrow="Account" title="Settings" subtitle="Manage your account and app access" />
 
-      <GlassCard className="animate-scale-in p-5" interactive>
+      <GlassCard className="animate-scale-in p-5">
         <Link to="/profile" className="flex items-center gap-4">
-          <span className="grid size-14 place-items-center rounded-2xl aurora text-lg font-bold text-primary-foreground">
-            {profile.name
-              .split(" ")
-              .map((n) => n[0])
-              .join("")}
+          <span className="grid size-14 shrink-0 place-items-center rounded-2xl aurora text-lg font-bold text-primary-foreground">
+            {displayName.slice(0, 1).toUpperCase()}
           </span>
-          <span className="flex-1">
-            <span className="block text-[15px] font-semibold">{profile.name}</span>
-            <span className="block text-xs text-muted-foreground">
-              {profile.age} · {profile.height} cm · {profile.weight} kg
-            </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold">{displayName}</span>
+            <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
           </span>
           <ChevronRight className="size-4 text-muted-foreground" />
         </Link>
       </GlassCard>
 
-      <SectionTitle className="mt-8 mb-3" title="Appearance & alerts" />
+      <SectionTitle className="mt-8 mb-3" title="Account" />
       <GlassCard className="divide-y divide-border overflow-hidden">
-        <Row
-          icon={Moon}
-          label="Dark mode"
-          hint="Deep space theme"
-          right={<Switch checked={dark} onChange={setDark} label="Dark mode" />}
-        />
-        <Row
-          icon={Bell}
-          label="Scan reminders"
-          hint="Daily at 08:00"
-          right={<Switch checked={notify} onChange={setNotify} label="Scan reminders" />}
-        />
-        <Row
-          icon={Ruler}
-          label="Units"
-          hint={metric ? "Metric · cm / kg" : "Imperial · ft / lb"}
-          right={<Switch checked={metric} onChange={setMetric} label="Metric units" />}
-        />
-        <Row
-          icon={Globe}
-          label="Language"
-          hint="English (UK)"
-          onClick={() => toast("12 languages available")}
-        />
+        <Link to="/profile" className="flex items-center gap-3.5 px-5 py-4">
+          <UserRound className="size-4 text-secondary" />
+          <span className="flex-1">
+            <span className="block text-sm font-medium">Personal profile</span>
+            <span className="block text-xs text-muted-foreground">Update display name and timezone</span>
+          </span>
+          <ChevronRight className="size-4 text-muted-foreground" />
+        </Link>
+        <Link to="/history" className="flex items-center gap-3.5 px-5 py-4">
+          <FileText className="size-4 text-secondary" />
+          <span className="flex-1">
+            <span className="block text-sm font-medium">Saved analyses</span>
+            <span className="block text-xs text-muted-foreground">View or delete records stored in your account</span>
+          </span>
+          <ChevronRight className="size-4 text-muted-foreground" />
+        </Link>
       </GlassCard>
 
-      <SectionTitle className="mt-8 mb-3" title="Privacy" />
+      <SectionTitle className="mt-8 mb-3" title="Trusted scan devices" />
+      <GlassCard className="p-5">
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Register this browser explicitly before scanning. Each registration belongs to your account, and you can revoke it here. Registering a browser does not approve other browsers or devices.
+        </p>
+        <button
+          type="button"
+          disabled={registering}
+          onClick={() => void registerThisBrowser()}
+          className="press mt-4 w-full rounded-2xl aurora px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          {registering ? "Registering…" : "Register this browser"}
+        </button>
+        <div className="mt-4 grid gap-3">
+          {devices.length ? devices.map((device) => (
+            <div key={device.id} className="flex items-start gap-3 rounded-xl border border-white/10 p-3">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-secondary" />
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-sm font-medium">{device.device_name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {device.status} · registered{" "}
+                  <LocalizedDate value={device.created_at} format="date" />
+                </p>
+              </div>
+              {device.status !== "REVOKED" ? (
+                <button
+                  type="button"
+                  disabled={revoking !== null}
+                  onClick={() => void revokeDevice(device.id)}
+                  className="text-xs font-semibold text-destructive disabled:opacity-50"
+                >
+                  {revoking === device.id ? "Revoking…" : "Revoke"}
+                </button>
+              ) : null}
+            </div>
+          )) : (
+            <p className="text-xs text-muted-foreground">No devices registered to this account yet.</p>
+          )}
+        </div>
+      </GlassCard>
+
+      <SectionTitle className="mt-8 mb-3" title="Privacy and installation" />
       <GlassCard className="divide-y divide-border overflow-hidden">
-        <Row
-          icon={ShieldCheck}
-          label="On-device processing"
-          hint="Scans never leave your phone"
-          right={
-            <Switch
-              checked={!analytics}
-              onChange={(v) => setAnalytics(!v)}
-              label="On-device processing"
-            />
-          }
-        />
-        <Row
-          icon={FileText}
-          label="Terms & privacy policy"
-          onClick={() => toast("Opening policy")}
-        />
-        <Row
-          icon={CircleQuestionMark}
-          label="Help centre"
-          hint="Guides and troubleshooting"
-          onClick={() => toast("Help centre")}
-        />
+        <div className="flex items-start gap-3.5 px-5 py-4">
+          <ShieldCheck className="mt-0.5 size-4 text-secondary" />
+          <div>
+            <p className="text-sm font-medium">Secure account access</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Your saved analyses are requested through the signed-in account. Camera images are sent to the VisionVitals backend for processing; they are not guaranteed to stay only on this phone.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3.5 px-5 py-4">
+          <Smartphone className="mt-0.5 size-4 text-secondary" />
+          <div>
+            <p className="text-sm font-medium">Install on iPhone</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Open VisionVitals in Safari, tap Share, choose Add to Home Screen, then tap Add. Installation does not by itself approve a device or create a native iOS app.
+            </p>
+          </div>
+        </div>
       </GlassCard>
 
       <button
         type="button"
-        onClick={() => toast("Signed out")}
-        className="press glass mt-6 flex w-full items-center justify-center gap-2 rounded-3xl py-4 text-sm font-semibold text-destructive"
+        disabled={signingOut}
+        onClick={() => void signOut()}
+        className="press glass mt-6 flex w-full items-center justify-center gap-2 rounded-3xl py-4 text-sm font-semibold text-destructive disabled:opacity-50"
       >
-        <LogOut className="size-4" /> Log out
+        <LogOut className="size-4" /> {signingOut ? "Signing out…" : "Log out"}
       </button>
 
       <p className="mt-6 text-center text-[11px] text-muted-foreground">
-        VisionVitals AI · version 2.4.0
+        VisionVitals AI · Web app
       </p>
     </AppShell>
   );

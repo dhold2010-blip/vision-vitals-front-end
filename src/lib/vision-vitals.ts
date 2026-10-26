@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireUserAccessToken } from "@/lib/auth";
 
+
 export type VisionCaptureResult = {
   capture: {
     id: string;
@@ -71,6 +72,21 @@ function getSafeError(response: Response, payload: unknown): Error {
   return new Error("VisionVitals could not complete the scan. Please try again.");
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (error) {
+    const name =
+      typeof error === "object" && error !== null && "name" in error
+        ? String(error.name)
+        : "";
+    if (name === "TimeoutError" || name === "AbortError") {
+      throw new Error("VisionVitals took too long to respond. Please try again.");
+    }
+    throw new Error("VisionVitals could not be reached. Check your connection and try again.");
+  }
+}
+
 async function parseJsonResponse(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) {
@@ -85,24 +101,23 @@ export const captureVision = createServerFn({ method: "POST" })
       throw new Error("The scan image was not provided in a valid request.");
     }
     const image = data.get("image");
-    if (!(image instanceof File) || image.size === 0 || image.size > 20 * 1024 * 1024) {
-      throw new Error("The scan image is missing, empty, or too large.");
+    if (!(image instanceof File) || image.size === 0 || image.size > 10 * 1024 * 1024) {
+      throw new Error("The scan image is missing, empty, or exceeds the 10 MB upload limit.");
     }
     return data;
   })
   .handler<VisionCaptureResult>(async ({ data }) => {
     const userAccessToken = await requireUserAccessToken();
     const backendUrl = getRequiredEnvironment("VISION_VITALS_BACKEND_URL");
-    const deviceId = getRequiredEnvironment("VISION_VITALS_DEVICE_ID");
-    const deviceCredential = getRequiredEnvironment("VISION_VITALS_DEVICE_CREDENTIAL");
+    const { deviceId, deviceSecret: deviceCredential } = await (await import("./devices.server")).getRegisteredBrowserDevice();
     const baseUrl = backendUrl.replace(/\/$/, "");
 
     const authenticationUrl = `${baseUrl}/api/v1/devices/${encodeURIComponent(deviceId)}/authenticate`;
-    const authResponse = await fetch(authenticationUrl, {
+    const authResponse = await fetchWithTimeout(authenticationUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ device_secret: deviceCredential }),
-    });
+    }, 15_000);
     const authPayload = await parseJsonResponse(authResponse);
     if (!authResponse.ok) {
       throw getSafeError(authResponse, authPayload);
@@ -123,11 +138,9 @@ export const captureVision = createServerFn({ method: "POST" })
       JSON.stringify({
         image_source: "APP_CAMERA",
         camera_type: "FRONTEND_CAMERA",
-        image_width: 1280,
-        image_height: 1920,
       }),
     );
-    const captureResponse = await fetch(captureUrl, {
+    const captureResponse = await fetchWithTimeout(captureUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${userAccessToken}`,
@@ -135,7 +148,7 @@ export const captureVision = createServerFn({ method: "POST" })
         "Idempotency-Key": crypto.randomUUID(),
       },
       body: formData,
-    });
+    }, 90_000);
     const capturePayload = await parseJsonResponse(captureResponse);
     if (!captureResponse.ok) {
       throw getSafeError(captureResponse, capturePayload);

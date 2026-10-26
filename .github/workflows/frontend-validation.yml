@@ -1,0 +1,35 @@
+name: Frontend validation
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: frontend-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Format changed frontend files
+        run: npx prettier --write src/components/vv/localized-date.tsx src/lib/backend-error.ts src/lib/records.ts src/lib/devices.ts src/lib/devices.server.ts src/lib/vision-vitals.ts src/routes/index.tsx src/routes/history.tsx src/routes/profile.tsx src/routes/reports.tsx src/routes/results.tsx src/routes/scan.tsx src/routes/settings.tsx
+      - name: Run ESLint
+        run: npm run lint
+      - name: Build frontend
+        run: npm run build

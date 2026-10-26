@@ -1,135 +1,145 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Download, Search, Trash2 } from "lucide-react";
+import { getCurrentUser } from "@/lib/auth";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
-import { Chip, GlassCard } from "@/components/vv/glass-card";
-import { ProgressRing } from "@/components/vv/progress";
-import { history as seed } from "@/lib/vitals";
+import { GlassCard } from "@/components/vv/glass-card";
+import { LocalizedDate } from "@/components/vv/localized-date";
+import { deleteAnalysis, listAnalyses, type AnalysisRecord } from "@/lib/records";
 
 export const Route = createFileRoute("/history")({
+  beforeLoad: async () => {
+    if (!(await getCurrentUser())) throw redirect({ to: "/auth" });
+  },
+  loader: () => listAnalyses(),
   head: () => ({
     meta: [
       { title: "Scan history — VisionVitals AI" },
       {
         name: "description",
-        content: "Search, filter and manage every past body scan on a clean animated timeline.",
+        content: "Review your saved VisionVitals analyses from your account.",
       },
-      { property: "og:title", content: "Scan history — VisionVitals AI" },
-      { property: "og:description", content: "Your full timeline of AI body scans." },
     ],
   }),
   component: History,
 });
 
-const filters = ["All", "Full body", "Face only", "Posture"] as const;
-
 function History() {
+  const initialItems = Route.useLoaderData() as AnalysisRecord[];
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<(typeof filters)[number]>("All");
   const [removed, setRemoved] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const items = useMemo(
     () =>
-      seed
-        .filter((s) => !removed.includes(s.id))
-        .filter((s) => (filter === "All" ? true : s.tag === filter))
-        .filter((s) =>
+      initialItems
+        .filter((scan) => !removed.includes(scan.id))
+        .filter((scan) =>
           query.trim()
-            ? `${s.date} ${s.time} ${s.tag} ${s.score}`.toLowerCase().includes(query.toLowerCase())
+            ? `${scan.status} ${scan.result?.result_status ?? ""} ${scan.result?.observation ?? ""} ${scan.created_at}`
+                .toLowerCase()
+                .includes(query.trim().toLowerCase())
             : true,
         ),
-    [query, filter, removed],
+    [initialItems, query, removed],
   );
+
+  async function removeScan(scan: AnalysisRecord) {
+    if (deleting) return;
+    if (!window.confirm("Delete this saved analysis and its stored camera image? This cannot be undone.")) return;
+    setDeleting(scan.id);
+    try {
+      await deleteAnalysis({ data: { id: scan.id } });
+      setRemoved((current) => [...current, scan.id]);
+      toast.success("Scan deleted from your account.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete this scan.");
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   return (
     <AppShell>
       <PageHeader
-        eyebrow="Timeline"
+        eyebrow="Your account"
         title="Scan history"
-        subtitle={`${items.length} scans stored on this device`}
+        subtitle={`${items.length} saved ${items.length === 1 ? "analysis" : "analyses"}`}
       />
 
       <label className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
         <Search className="size-4 text-muted-foreground" />
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by date, type or score"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search status, date or observation"
           className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          aria-label="Search scans"
+          aria-label="Search saved analyses"
         />
       </label>
 
-      <div className="mt-4 -mx-5 flex gap-2 overflow-x-auto px-5 sm:mx-0 sm:px-0">
-        {filters.map((f) => (
-          <Chip key={f} active={f === filter} onClick={() => setFilter(f)}>
-            {f}
-          </Chip>
-        ))}
-      </div>
-
-      <ol className="relative mt-6 grid gap-3 pl-6">
-        <span className="absolute top-2 bottom-2 left-[7px] w-px bg-gradient-to-b from-secondary/60 via-primary/40 to-transparent" />
-        {items.map((scan, i) => (
-          <li
-            key={scan.id}
-            className="animate-rise relative"
-            style={{ animationDelay: `${i * 60}ms` }}
-          >
-            <span className="absolute top-8 -left-[22px] size-3 rounded-full border-2 border-background bg-secondary" />
-            <GlassCard className="p-4" interactive>
-              <div className="flex items-center gap-4">
-                <Link to="/results" className="flex flex-1 items-center gap-4">
-                  <ProgressRing value={scan.score} size={56} stroke={5} gradientId={`h-${scan.id}`}>
-                    <span className="text-sm font-bold tabular-nums">{scan.score}</span>
-                  </ProgressRing>
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {scan.date} · {scan.time}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {scan.tag} · BMI {scan.bmi} · posture {scan.posture}%
-                    </p>
-                  </div>
+      <div className="mt-5 grid gap-3">
+        {items.map((scan) => (
+          <GlassCard key={scan.id} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">
+                  <LocalizedDate value={scan.created_at} />
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {scan.result?.result_status ?? scan.status}
+                  {scan.result?.confidence != null
+                    ? ` · ${Math.round(scan.result.confidence * 100)}% confidence`
+                    : ""}
+                </p>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  {scan.result?.observation ??
+                    "No observation is available for this analysis yet."}
+                </p>
+                {scan.result?.warnings?.length ? (
+                  <p className="mt-2 text-xs text-amber-300">
+                    {scan.result.warnings.join(" ")}
+                  </p>
+                ) : null}
+                {scan.result?.limitations?.length ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Limitations: {scan.result.limitations.join(" ")}
+                  </p>
+                ) : null}
+                <Link
+                  to="/results"
+                  search={{ analysisId: scan.id }}
+                  className="mt-3 inline-flex rounded-xl border border-border px-3 py-2 text-xs font-semibold text-secondary"
+                >
+                  View saved result
                 </Link>
-                <button
-                  type="button"
-                  aria-label={`Export scan ${scan.id}`}
-                  onClick={() => toast.success(`Exported ${scan.id}.pdf`)}
-                  className="press grid size-9 place-items-center rounded-xl bg-white/5 text-muted-foreground hover:text-foreground"
-                >
-                  <Download className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Delete scan ${scan.id}`}
-                  onClick={() => {
-                    setRemoved((r) => [...r, scan.id]);
-                    toast("Scan deleted", {
-                      action: {
-                        label: "Undo",
-                        onClick: () => setRemoved((r) => r.filter((id) => id !== scan.id)),
-                      },
-                    });
-                  }}
-                  className="press grid size-9 place-items-center rounded-xl bg-white/5 text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="size-4" />
-                </button>
               </div>
-            </GlassCard>
-          </li>
+              <button
+                type="button"
+                aria-label="Delete saved analysis"
+                disabled={deleting !== null}
+                onClick={() => void removeScan(scan)}
+                className="press grid size-9 shrink-0 place-items-center rounded-xl bg-white/5 text-muted-foreground hover:text-destructive disabled:opacity-50"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+          </GlassCard>
         ))}
         {items.length === 0 ? (
           <GlassCard className="p-8 text-center">
-            <p className="text-sm font-semibold">No scans match that filter</p>
+            <p className="text-sm font-semibold">
+              {initialItems.length === 0 ? "No saved analyses yet" : "No analyses match your search"}
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Try another type or clear your search.
+              {initialItems.length === 0
+                ? "Your completed scans will appear here after you sign in and run a scan."
+                : "Try a different search term."}
             </p>
           </GlassCard>
         ) : null}
-      </ol>
+      </div>
     </AppShell>
   );
 }

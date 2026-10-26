@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "VisionVitals AI",
+  "short_name": "VisionVitals",
+  "description": "VisionVitals AI personal health analysis and scan reports.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#050816",
+  "theme_color": "#050816",
+  "icons": [
+    {
+      "src": "/vision-vitals-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
