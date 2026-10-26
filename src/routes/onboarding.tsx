@@ -15,7 +15,10 @@ export const Route = createFileRoute("/onboarding")({
           "Learn how camera capture, backend processing and account-backed VisionVitals analyses work.",
       },
       { property: "og:title", content: "How VisionVitals AI works" },
-      { property: "og:description", content: "Camera images are sent to the backend; outputs are not medical diagnoses." },
+      {
+        property: "og:description",
+        content: "Camera images are sent to the backend; outputs are not medical diagnoses.",
+      },
     ],
   }),
   component: Onboarding,

@@ -186,7 +186,9 @@ function Auth() {
                 if (result.remoteInvalidated) {
                   toast.success("Signed out");
                 } else {
-                  toast.warning("Signed out on this browser, but server session revocation could not be confirmed.");
+                  toast.warning(
+                    "Signed out on this browser, but server session revocation could not be confirmed.",
+                  );
                 }
               }}
             >
