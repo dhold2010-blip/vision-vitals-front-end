@@ -1,5 +1,6 @@
 import { deleteCookie, getCookie, setCookie } from "@tanstack/react-start/server";
 import { requireUserAccessToken } from "@/lib/auth";
+import { getBackendErrorMessage } from "@/lib/backend-error";
 
 const deviceCookie = "vv_web_device";
 
@@ -46,10 +47,9 @@ async function backendRequest<T>(path: string, token: string, init: RequestInit 
   });
   const payload = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
-    const errorPayload = payload as { error?: { message?: string }; detail?: string } | null;
     if (response.status === 401) throw new Error("Your session expired. Please sign in again.");
     if (response.status >= 500) throw new Error("VisionVitals is temporarily unavailable.");
-    throw new Error(errorPayload?.error?.message || errorPayload?.detail || "The device request could not be completed.");
+    throw new Error(getBackendErrorMessage(payload, "The device request could not be completed."));
   }
   if (typeof payload !== "object" || payload === null || !("data" in payload)) {
     throw new Error("VisionVitals returned an invalid device response.");

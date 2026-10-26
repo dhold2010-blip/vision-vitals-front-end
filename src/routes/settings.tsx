@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
+import { LocalizedDate } from "@/components/vv/localized-date";
 import { getMyProfile } from "@/lib/records";
 import { listMyDevices, registerBrowserDevice, revokeMyDevice } from "@/lib/devices";
 import { logoutAccount } from "@/lib/auth";
@@ -144,7 +145,8 @@ function SettingsScreen() {
               <div className="min-w-0 flex-1">
                 <p className="break-words text-sm font-medium">{device.device_name}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {device.status} · registered {new Date(device.created_at).toLocaleDateString()}
+                  {device.status} · registered{" "}
+                  <LocalizedDate value={device.created_at} format="date" />
                 </p>
               </div>
               {device.status !== "REVOKED" ? (

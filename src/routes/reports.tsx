@@ -3,6 +3,7 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Activity, AlertTriangle, FileText } from "lucide-react";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
+import { LocalizedDate } from "@/components/vv/localized-date";
 import { listAnalyses } from "@/lib/records";
 
 export const Route = createFileRoute("/reports")({
@@ -68,7 +69,7 @@ function Reports() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold">
-                    {new Date(analysis.created_at).toLocaleString()}
+                    <LocalizedDate value={analysis.created_at} />
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {analysis.result?.result_status ?? analysis.status}

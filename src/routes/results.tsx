@@ -2,6 +2,7 @@ import { createFileRoute, Link, redirect, useLocation } from "@tanstack/react-ro
 import { AlertTriangle, CheckCircle2, CircleHelp } from "lucide-react";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
+import { LocalizedDate } from "@/components/vv/localized-date";
 import { getCurrentUser } from "@/lib/auth";
 import { getAnalysis, type AnalysisRecord } from "@/lib/records";
 import type { VisionCaptureResult } from "@/lib/vision-vitals";
@@ -48,7 +49,7 @@ function Results() {
   return (
     <AppShell>
       <PageHeader
-        eyebrow={createdAt ? new Date(createdAt).toLocaleString() : "Saved analysis"}
+        eyebrow={createdAt ? <LocalizedDate value={createdAt} /> : "Saved analysis"}
         title="Your analysis"
         subtitle={observation?.result_status ?? analysis?.status ?? "No analysis selected"}
       />

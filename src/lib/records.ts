@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireUserAccessToken } from "@/lib/auth";
+import { getBackendErrorMessage } from "@/lib/backend-error";
 
 export type AnalysisRecord = {
   id: string;
@@ -38,11 +39,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   const payload = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
-    const errorPayload = payload as { error?: { message?: string }; detail?: string } | null;
     if (response.status === 401) throw new Error("Your session expired. Please sign in again.");
     if (response.status === 404) throw new Error("That record could not be found.");
     if (response.status >= 500) throw new Error("VisionVitals is temporarily unavailable. Please try again.");
-    throw new Error(errorPayload?.error?.message || errorPayload?.detail || "VisionVitals could not complete that request.");
+    throw new Error(getBackendErrorMessage(payload, "VisionVitals could not complete that request."));
   }
   if (typeof payload !== "object" || payload === null || !("data" in payload)) {
     throw new Error("VisionVitals returned an invalid response.");

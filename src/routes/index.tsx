@@ -4,6 +4,7 @@ import { ArrowUpRight, ClipboardList, ScanFace, ShieldCheck, Sparkles } from "lu
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/vv/app-shell";
 import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
+import { LocalizedDate } from "@/components/vv/localized-date";
 import { getMyProfile, listAnalyses } from "@/lib/records";
 
 export const Route = createFileRoute("/")({
@@ -73,9 +74,14 @@ function Home() {
               {latest ? "Your latest saved analysis" : "Start with your first scan"}
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {latest
-                ? `Latest analysis: ${new Date(latest.created_at).toLocaleString()}. Status: ${latest.result?.result_status ?? latest.status}.`
-                : "When you complete a scan, its available analysis and warnings will appear here. No sample health measurements are shown."}
+              {latest ? (
+                <>
+                  Latest analysis: <LocalizedDate value={latest.created_at} />. Status:{" "}
+                  {latest.result?.result_status ?? latest.status}.
+                </>
+              ) : (
+                "When you complete a scan, its available analysis and warnings will appear here. No sample health measurements are shown."
+              )}
             </p>
             {latest?.result?.observation ? (
               <p className="mt-2 text-sm leading-relaxed">{latest.result.observation}</p>
@@ -126,7 +132,9 @@ function Home() {
         <ul className="grid gap-3">
           {analyses.slice(0, 3).map((analysis) => (
             <GlassCard as="li" key={analysis.id} className="p-4">
-              <p className="text-sm font-semibold">{new Date(analysis.created_at).toLocaleString()}</p>
+              <p className="text-sm font-semibold">
+                <LocalizedDate value={analysis.created_at} />
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {analysis.result?.result_status ?? analysis.status}
                 {analysis.result?.confidence != null

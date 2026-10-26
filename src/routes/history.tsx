@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { GlassCard } from "@/components/vv/glass-card";
+import { LocalizedDate } from "@/components/vv/localized-date";
 import { deleteAnalysis, listAnalyses, type AnalysisRecord } from "@/lib/records";
 
 export const Route = createFileRoute("/history")({
@@ -23,11 +24,6 @@ export const Route = createFileRoute("/history")({
   }),
   component: History,
 });
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Date unavailable" : date.toLocaleString();
-}
 
 function History() {
   const initialItems = Route.useLoaderData() as AnalysisRecord[];
@@ -88,7 +84,9 @@ function History() {
           <GlassCard key={scan.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{formatDate(scan.created_at)}</p>
+                <p className="text-sm font-semibold">
+                  <LocalizedDate value={scan.created_at} />
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {scan.result?.result_status ?? scan.status}
                   {scan.result?.confidence != null
