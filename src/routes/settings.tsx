@@ -72,9 +72,14 @@ function SettingsScreen() {
     if (signingOut) return;
     setSigningOut(true);
     try {
-      await logoutAccount();
-      toast.success("You have been signed out.");
-      await navigate({ to: "/auth" });
+      const result = await logoutAccount();
+      if (result.remoteInvalidated) {
+        toast.success("You have been signed out.");
+      } else {
+        toast.warning("Signed out on this browser, but server session revocation could not be confirmed.");
+      }
+      await navigate({ to: "/auth", replace: true });
+      await router.invalidate();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not sign out.");
     } finally {

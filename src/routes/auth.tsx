@@ -98,7 +98,7 @@ function Auth() {
   }, []);
 
   const copy = {
-    login: { title: "Welcome back", sub: "Sign in to pick up your health trend.", cta: "Sign in" },
+    login: { title: "Welcome back", sub: "Sign in to view your saved analyses.", cta: "Sign in" },
     register: {
       title: "Create account",
       sub: "Create your account to start a personal scan.",
@@ -181,9 +181,13 @@ function Auth() {
               type="button"
               className="press mt-4 w-full rounded-2xl border border-border py-3 text-sm"
               onClick={async () => {
-                await logoutAccount();
+                const result = await logoutAccount();
                 setUser(null);
-                toast.success("Signed out");
+                if (result.remoteInvalidated) {
+                  toast.success("Signed out");
+                } else {
+                  toast.warning("Signed out on this browser, but server session revocation could not be confirmed.");
+                }
               }}
             >
               Sign out {user.email}

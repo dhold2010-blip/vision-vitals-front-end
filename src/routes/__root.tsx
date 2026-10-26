@@ -82,7 +82,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "AI-powered camera body and health analysis with instant vitals, trends and reports.",
+          "Camera-based image analysis with account-backed results, warnings and limitations. Not a medical diagnosis.",
       },
       { name: "theme-color", content: "#050816" },
       { name: "apple-mobile-web-app-capable", content: "yes" },

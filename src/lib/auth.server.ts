@@ -164,17 +164,23 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   return (await currentSession())?.user ?? null;
 }
 
-export async function logout(): Promise<{ loggedOut: true }> {
+export async function logout(): Promise<{ loggedOut: true; remoteInvalidated: boolean }> {
+  let remoteInvalidated = false;
   try {
     const session = await currentSession();
-    if (session) {
-      await requestJson("/api/v1/auth/logout", {
+    if (!session) {
+      remoteInvalidated = true;
+    } else {
+      const { response } = await requestJson("/api/v1/auth/logout", {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}` },
       });
+      remoteInvalidated = response.ok;
     }
+  } catch {
+    remoteInvalidated = false;
   } finally {
     clearTokens();
   }
-  return { loggedOut: true };
+  return { loggedOut: true, remoteInvalidated };
 }

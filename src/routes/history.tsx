@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/auth";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -51,6 +51,7 @@ function History() {
 
   async function removeScan(scan: AnalysisRecord) {
     if (deleting) return;
+    if (!window.confirm("Delete this saved analysis and its stored camera image? This cannot be undone.")) return;
     setDeleting(scan.id);
     try {
       await deleteAnalysis({ data: { id: scan.id } });
@@ -108,6 +109,13 @@ function History() {
                     Limitations: {scan.result.limitations.join(" ")}
                   </p>
                 ) : null}
+                <Link
+                  to="/results"
+                  search={{ analysisId: scan.id }}
+                  className="mt-3 inline-flex rounded-xl border border-border px-3 py-2 text-xs font-semibold text-secondary"
+                >
+                  View saved result
+                </Link>
               </div>
               <button
                 type="button"

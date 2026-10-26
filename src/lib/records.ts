@@ -53,6 +53,23 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const listAnalyses = createServerFn({ method: "GET" })
   .handler(async () => request<AnalysisRecord[]>("/api/v1/analyses?limit=100&offset=0"));
 
+export const getAnalysis = createServerFn({ method: "GET" })
+  .validator((data: unknown) => {
+    if (
+      typeof data !== "object" ||
+      data === null ||
+      !("id" in data) ||
+      typeof data.id !== "string" ||
+      !/^[a-zA-Z0-9_-]{1,128}$/.test(data.id)
+    ) {
+      throw new Error("Select a valid analysis.");
+    }
+    return { id: data.id };
+  })
+  .handler(async ({ data }) =>
+    request<AnalysisRecord>("/api/v1/analyses/" + encodeURIComponent(data.id)),
+  );
+
 export const deleteAnalysis = createServerFn({ method: "POST" })
   .validator((data: unknown) => {
     if (typeof data !== "object" || data === null || !("id" in data) || typeof data.id !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(data.id)) {

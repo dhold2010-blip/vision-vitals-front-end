@@ -12,10 +12,10 @@ export const Route = createFileRoute("/onboarding")({
       {
         name: "description",
         content:
-          "Three quick steps: an AI camera scan, a full body analysis, and privacy that keeps every scan on your device.",
+          "Learn how camera capture, backend processing and account-backed VisionVitals analyses work.",
       },
       { property: "og:title", content: "How VisionVitals AI works" },
-      { property: "og:description", content: "Scan, analyse, stay private — a 60 second tour." },
+      { property: "og:description", content: "Camera images are sent to the backend; outputs are not medical diagnoses." },
     ],
   }),
   component: Onboarding,
@@ -25,20 +25,20 @@ const steps = [
   {
     icon: ScanFace,
     eyebrow: "Step one",
-    title: "A scan that takes 14 seconds",
-    body: "Stand 1.5 metres from your camera. VisionVitals locks onto 68 facial landmarks and a full skeletal map, then holds focus while you breathe normally.",
+    title: "Capture a camera image",
+    body: "Allow camera access in your browser, frame the image you want to submit, and choose Capture. The app does not claim to detect landmarks or measure vitals on the device.",
   },
   {
     icon: Activity,
     eyebrow: "Step two",
-    title: "Twelve vitals, one score",
-    body: "Estimated age, height, weight, BMI, body type, symmetry, posture, resting heart rate and skin tone — each with its own confidence reading.",
+    title: "Review the actual response",
+    body: "The backend may return an observation, warnings, limitations, or an unavailable status. The app displays that response without filling in missing measurements.",
   },
   {
     icon: Lock,
     eyebrow: "Step three",
-    title: "Your body stays yours",
-    body: "Frames are processed on device and discarded the moment your report is written. Nothing is uploaded, shared or sold. Ever.",
+    title: "Know where your image goes",
+    body: "Camera images are uploaded to the VisionVitals backend and may be stored with a saved analysis. Review or delete saved analyses from your account. Results are not a diagnosis.",
   },
 ];
 

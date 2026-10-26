@@ -1,8 +1,7 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
-import { Check, CircleAlert, RefreshCw, SwitchCamera, X, Zap } from "lucide-react";
+import { CircleAlert, RefreshCw, SwitchCamera, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Backdrop } from "@/components/vv/app-shell";
-import { scanStages } from "@/lib/vitals";
 import { getCurrentUser } from "@/lib/auth";
 import { captureVision, type VisionCaptureResult } from "@/lib/vision-vitals";
 import { cn } from "@/lib/utils";
@@ -13,20 +12,37 @@ export const Route = createFileRoute("/scan")({
   },
   head: () => ({
     meta: [
-      { title: "Live AI scan — VisionVitals AI" },
+      { title: "Camera scan — VisionVitals AI" },
       {
         name: "description",
-        content:
-          "Run a live camera scan with face and body landmark detection, a scanning progress ring and real-time AI status.",
+        content: "Capture and submit a camera image to the VisionVitals backend, then review its actual response.",
       },
-      { property: "og:title", content: "Live AI scan — VisionVitals AI" },
-      { property: "og:description", content: "Face and body landmark detection in 14 seconds." },
+      { property: "og:title", content: "Camera scan — VisionVitals AI" },
+      { property: "og:description", content: "Camera image processing with service-returned results and limitations." },
     ],
   }),
   component: ScanScreen,
 });
 
-type Phase = "idle" | "scanning" | "analyzing";
+type Phase = "idle" | "analyzing";
+type TorchCapabilities = MediaTrackCapabilities & { torch?: boolean };
+
+function cameraFailureMessage(error: unknown): string {
+  const name =
+    typeof error === "object" && error !== null && "name" in error
+      ? String(error.name)
+      : "";
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Camera permission was denied or blocked. Allow camera access in your browser settings, then retry.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "No camera was found on this device.";
+  }
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "The camera is already in use by another app. Close the other app and retry.";
+  }
+  return "Could not start the camera. Check browser permissions and retry.";
+}
 
 function ScanScreen() {
   const navigate = useNavigate();
@@ -35,12 +51,14 @@ function ScanScreen() {
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [torchAvailable, setTorchAvailable] = useState(false);
   const [torch, setTorch] = useState(false);
+  const [cameraRetry, setCameraRetry] = useState(0);
   const [phase, setPhase] = useState<Phase>("idle");
-  const [progress, setProgress] = useState(0);
 
   const stop = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   }, []);
 
@@ -50,13 +68,12 @@ function ScanScreen() {
       throw new Error("The camera frame is not ready. Please retry the scan.");
     }
 
+    const scale = Math.min(1, 1280 / video.videoWidth, 1920 / video.videoHeight);
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
     const context = canvas.getContext("2d");
-    if (!context) {
-      throw new Error("The browser could not prepare the camera image.");
-    }
+    if (!context) throw new Error("The browser could not prepare the camera image.");
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const imageBlob = await new Promise<Blob>((resolve, reject) => {
@@ -66,120 +83,132 @@ function ScanScreen() {
           else reject(new Error("The camera image could not be created."));
         },
         "image/jpeg",
-        0.9,
+        0.86,
       );
     });
-    const image = new File([imageBlob], "vision-vitals-camera.jpg", {
-      type: "image/jpeg",
-    });
+    if (imageBlob.size === 0 || imageBlob.size > 10 * 1024 * 1024) {
+      throw new Error("The captured image exceeds the 10 MB upload limit. Try another camera or reduce its resolution.");
+    }
+    const image = new File([imageBlob], "vision-vitals-camera.jpg", { type: "image/jpeg" });
     const formData = new FormData();
     formData.append("image", image);
-    formData.append("image_width", String(canvas.width));
-    formData.append("image_height", String(canvas.height));
-
     return captureVision({ data: formData });
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    async function start() {
+    async function startCamera() {
+      setCameraReady(false);
+      setTorchAvailable(false);
+      setTorch(false);
+      setCameraError(null);
+      stop();
+      if (videoRef.current) videoRef.current.srcObject = null;
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError("Camera capture is unavailable in this browser. Use a modern browser on HTTPS, then retry.");
+        return;
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 1920 } },
           audio: false,
         });
         if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
+          stream.getTracks().forEach((track) => track.stop());
           return;
         }
-        stop();
         streamRef.current = stream;
-        setCameraError(null);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => undefined);
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track?.getCapabilities?.() as TorchCapabilities | undefined;
+        setTorchAvailable(Boolean(capabilities?.torch));
+        const video = videoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          await video.play();
         }
-      } catch {
-        if (!cancelled)
-          setCameraError("Camera access is blocked. Allow camera access in your browser settings and try again.");
+        if (!cancelled) setCameraReady(true);
+      } catch (error) {
+        if (!cancelled) setCameraError(cameraFailureMessage(error));
       }
     }
-    void start();
+    void startCamera();
     return () => {
       cancelled = true;
       stop();
     };
-  }, [facing, stop]);
+  }, [cameraRetry, facing, stop]);
 
-  useEffect(() => {
-    if (phase === "idle") return;
-    const id = window.setInterval(() => {
-      setProgress((p) => {
-        const next = p + (phase === "scanning" ? 1.6 : 2.4);
-        return next >= 100 ? 100 : next;
-      });
-    }, 60);
-    return () => window.clearInterval(id);
-  }, [phase]);
-
-  useEffect(() => {
-    if (progress < 100) return;
-    if (phase === "scanning") {
-      setProgress(0);
-      setPhase("analyzing");
-    } else if (phase === "analyzing") {
-      setCaptureError(null);
-      void captureCurrentFrame()
-        .then((result) => {
-          stop();
-          navigate({ to: "/results", state: { result } });
-        })
-        .catch((error: unknown) => {
-          stop();
-          const message =
-            error instanceof Error
-              ? error.message
-              : "The scan could not be completed. Please try again.";
-          setCaptureError(message);
-          setPhase("idle");
-          setProgress(0);
-        });
+  async function startScan() {
+    if (!cameraReady || phase !== "idle") return;
+    setCaptureError(null);
+    setPhase("analyzing");
+    let result: VisionCaptureResult;
+    try {
+      result = await captureCurrentFrame();
+    } catch (error) {
+      setCaptureError(error instanceof Error ? error.message : "The scan could not be completed. Please try again.");
+      setPhase("idle");
+      return;
     }
-  }, [captureCurrentFrame, navigate, phase, progress, stop]);
 
-  const stageIndex = Math.min(
-    scanStages.length - 1,
-    Math.floor((progress / 100) * scanStages.length),
-  );
-  const status =
-    phase === "idle"
-      ? "Stand 1.5 m back, full body in frame"
-      : phase === "scanning"
-        ? ["Detecting face…", "Analyzing body…", "Hold still…"][stageIndex % 3]
-        : scanStages[stageIndex];
+    stop();
+    try {
+      await navigate({
+        to: "/results",
+        search: { analysisId: result.analysis?.id },
+        state: { result },
+      });
+    } catch {
+      setCaptureError("The response returned, but its result page could not open. Check Scan history before retrying.");
+      setPhase("idle");
+    }
+  }
+
+  async function toggleTorch() {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track || !torchAvailable || phase !== "idle") return;
+    const next = !torch;
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: next } as unknown as MediaTrackConstraintSet],
+      });
+      setTorch(next);
+    } catch {
+      setCaptureError("This camera could not change its torch setting.");
+      setTorch(false);
+    }
+  }
+
+  const status = cameraError
+    ? "Camera unavailable"
+    : phase === "analyzing"
+      ? "Sending image to VisionVitals…"
+      : cameraReady
+        ? "Camera ready — capture when you are ready"
+        : "Requesting camera access…";
 
   return (
     <div className="relative min-h-dvh overflow-hidden">
       <Backdrop />
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-5 pt-6 pb-10">
+      <div className="relative mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-5 pt-6 pb-8">
         <div className="flex items-center justify-between">
-          <Link
-            to="/"
-            aria-label="Close scanner"
-            className="press glass grid size-10 place-items-center rounded-full"
-          >
+          <Link to="/" aria-label="Close scanner" className="press glass grid size-10 place-items-center rounded-full">
             <X className="size-4" />
           </Link>
           <p className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">
-            {phase === "analyzing" ? "Neural analysis" : "Live scan"}
+            {phase === "analyzing" ? "Submitting capture" : "Camera scan"}
           </p>
           <button
             type="button"
-            aria-label="Toggle torch"
+            aria-label="Toggle camera torch"
             aria-pressed={torch}
-            onClick={() => setTorch((t) => !t)}
+            title={torchAvailable ? "Toggle camera torch" : "Torch is not supported by this camera"}
+            disabled={!torchAvailable || phase !== "idle"}
+            onClick={() => void toggleTorch()}
             className={cn(
-              "press glass grid size-10 place-items-center rounded-full",
+              "press glass grid size-10 place-items-center rounded-full disabled:cursor-not-allowed disabled:opacity-40",
               torch && "border-warning/50 text-warning",
             )}
           >
@@ -198,38 +227,27 @@ function ScanScreen() {
               phase === "analyzing" && "opacity-40 blur-sm",
             )}
           />
+          <Overlay active={cameraReady} />
 
           {cameraError || captureError ? (
-            <div className="absolute inset-0 grid place-items-center px-8 text-center">
+            <div className="absolute inset-0 z-20 grid place-items-center bg-black/55 px-8 text-center">
               <div>
                 <CircleAlert className="mx-auto size-6 text-warning" />
-                <p className="mt-3 text-sm text-muted-foreground">{cameraError || captureError}</p>
+                <p role="alert" className="mt-3 text-sm text-muted-foreground">
+                  {cameraError || captureError}
+                </p>
               </div>
             </div>
           ) : null}
 
-          <Overlay phase={phase} />
+          {phase === "analyzing" ? <WaitingOverlay /> : null}
 
-          {phase !== "idle" ? (
-            <div className="animate-sweep absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-transparent via-secondary/25 to-transparent" />
-          ) : null}
-
-          {phase === "analyzing" ? <NeuralField progress={progress} /> : null}
-
-          <div className="absolute inset-x-0 bottom-0 p-5">
+          <div className="absolute inset-x-0 bottom-0 z-10 p-5">
             <div className="glass-strong rounded-3xl px-5 py-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">{status}</p>
-                <span className="text-sm font-bold tabular-nums text-secondary">
-                  {Math.round(progress)}%
-                </span>
-              </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full aurora"
-                  style={{ width: `${progress}%`, transition: "width 0.2s linear" }}
-                />
-              </div>
+              <p className="text-sm font-semibold">{status}</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                The camera image is sent to the VisionVitals backend. Returned analysis is not a medical diagnosis.
+              </p>
             </div>
           </div>
         </div>
@@ -238,40 +256,33 @@ function ScanScreen() {
           <button
             type="button"
             aria-label="Flip camera"
-            onClick={() => setFacing((f) => (f === "user" ? "environment" : "user"))}
-            className="press glass grid size-14 place-items-center rounded-2xl"
+            disabled={!cameraReady || phase !== "idle"}
+            onClick={() => setFacing((current) => (current === "user" ? "environment" : "user"))}
+            className="press glass grid size-14 place-items-center rounded-2xl disabled:opacity-40"
           >
             <SwitchCamera className="size-5" />
           </button>
 
           <button
             type="button"
-            onClick={() => {
-              if (phase === "idle") {
-                setProgress(0);
-                setPhase("scanning");
-              } else {
-                setPhase("idle");
-                setProgress(0);
-              }
-            }}
-            className="press relative grid size-20 place-items-center rounded-full aurora shadow-[var(--shadow-glow)]"
-            aria-label={phase === "idle" ? "Start scan" : "Cancel scan"}
+            disabled={!cameraReady || phase === "analyzing"}
+            onClick={() => void startScan()}
+            className="press relative grid size-20 place-items-center rounded-full aurora shadow-[var(--shadow-glow)] disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={phase === "idle" ? "Capture image and submit for analysis" : "Analysis in progress"}
           >
-            <span className="animate-pulse-ring absolute inset-0 rounded-full border border-secondary/60" />
             {phase === "idle" ? (
               <span className="size-14 rounded-full border-4 border-white/70" />
             ) : (
-              <X className="size-7 text-primary-foreground" />
+              <RefreshCw className="size-7 animate-spin-slow text-primary-foreground" />
             )}
           </button>
 
           <button
             type="button"
-            aria-label="Restart scan"
+            aria-label="Retry camera access"
             onClick={() => {
-              setPhase("idle");
-              setProgress(0);
+              setCaptureError(null);
+              setCameraRetry((current) => current + 1);
             }}
             className="press glass grid size-14 place-items-center rounded-2xl"
           >
@@ -283,102 +294,26 @@ function ScanScreen() {
   );
 }
 
-function Overlay({ phase }: { phase: Phase }) {
-  const dots = [
-    [50, 20],
-    [42, 26],
-    [58, 26],
-    [38, 34],
-    [62, 34],
-    [50, 33],
-    [44, 40],
-    [56, 40],
-    [50, 46],
-    [36, 52],
-    [64, 52],
-    [50, 58],
-    [40, 70],
-    [60, 70],
-    [42, 84],
-    [58, 84],
-  ];
+function Overlay({ active }: { active: boolean }) {
   return (
-    <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-      <div className="absolute inset-6 rounded-[28px] border border-white/15" />
-      {[
-        "left-6 top-6 border-t-2 border-l-2 rounded-tl-[28px]",
-        "right-6 top-6 border-t-2 border-r-2 rounded-tr-[28px]",
-        "left-6 bottom-6 border-b-2 border-l-2 rounded-bl-[28px]",
-        "right-6 bottom-6 border-b-2 border-r-2 rounded-br-[28px]",
-      ].map((c) => (
-        <span key={c} className={cn("absolute size-12 border-secondary", c)} />
-      ))}
-
-      <div
-        className={cn(
-          "absolute top-[12%] left-1/2 h-[26%] w-[42%] -translate-x-1/2 rounded-[50%] border transition-all duration-700",
-          phase === "idle" ? "border-white/25" : "border-secondary/80 shadow-[var(--shadow-glow)]",
-        )}
-      />
-      {phase !== "idle"
-        ? dots.map(([x, y], i) => (
-            <span
-              key={`${x}-${y}`}
-              className="animate-scale-in absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-secondary shadow-[0_0_10px_var(--color-secondary)]"
-              style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${i * 45}ms` }}
-            />
-          ))
-        : null}
+    <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center p-8">
+      <div className={cn("relative h-[72%] w-[78%] rounded-[30px] border", active ? "border-secondary/50" : "border-white/25")}>
+        <span className="absolute top-0 left-0 h-8 w-8 rounded-tl-2xl border-t-2 border-l-2 border-secondary" />
+        <span className="absolute top-0 right-0 h-8 w-8 rounded-tr-2xl border-t-2 border-r-2 border-secondary" />
+        <span className="absolute bottom-0 left-0 h-8 w-8 rounded-bl-2xl border-b-2 border-l-2 border-secondary" />
+        <span className="absolute right-0 bottom-0 h-8 w-8 rounded-br-2xl border-r-2 border-b-2 border-secondary" />
+      </div>
     </div>
   );
 }
 
-function NeuralField({ progress }: { progress: number }) {
-  const nodes = Array.from({ length: 22 }, (_, i) => ({
-    x: 12 + ((i * 37) % 76),
-    y: 10 + ((i * 53) % 80),
-  }));
+function WaitingOverlay() {
   return (
-    <div className="absolute inset-0 grid place-items-center" aria-hidden="true">
-      <svg viewBox="0 0 100 100" className="absolute inset-0 size-full opacity-70">
-        {nodes.map((n, i) =>
-          nodes
-            .slice(i + 1, i + 3)
-            .map((m, j) => (
-              <line
-                key={`${i}-${j}`}
-                x1={n.x}
-                y1={n.y}
-                x2={m.x}
-                y2={m.y}
-                stroke="var(--color-primary)"
-                strokeWidth="0.15"
-                opacity="0.55"
-              />
-            )),
-        )}
-        {nodes.map((n, i) => (
-          <circle
-            key={i}
-            cx={n.x}
-            cy={n.y}
-            r="0.7"
-            fill="var(--color-secondary)"
-            className="animate-scale-in"
-            style={{ animationDelay: `${i * 60}ms` }}
-          />
-        ))}
-      </svg>
-      <div className="relative grid size-48 place-items-center">
-        <span className="animate-spin-slow absolute inset-0 rounded-full border-t-2 border-secondary/70" />
-        <span className="animate-spin-slow absolute inset-5 rounded-full border-b-2 border-accent/70 [animation-direction:reverse]" />
-        <span className="animate-pulse-ring absolute inset-8 rounded-full border border-primary/60" />
-        <div className="text-center">
-          <p className="text-4xl font-extrabold tabular-nums">{Math.round(progress)}%</p>
-          <p className="mt-1 flex items-center justify-center gap-1 text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
-            <Check className="size-3 text-success" /> AI thinking
-          </p>
-        </div>
+    <div className="absolute inset-0 z-10 grid place-items-center bg-black/20 px-6">
+      <div className="glass-strong rounded-3xl px-6 py-5 text-center">
+        <RefreshCw className="mx-auto size-6 animate-spin-slow text-secondary" />
+        <p className="mt-3 text-sm font-semibold">Waiting for VisionVitals</p>
+        <p className="mt-1 text-xs text-muted-foreground">No result is shown until the service responds.</p>
       </div>
     </div>
   );
