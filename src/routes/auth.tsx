@@ -37,6 +37,8 @@ function Field({
   autoComplete,
   value,
   onChange,
+  hint,
+  disabled,
 }: {
   icon: typeof Mail;
   label: string;
@@ -44,6 +46,8 @@ function Field({
   autoComplete?: string;
   value: string;
   onChange: (value: string) => void;
+  hint?: string;
+  disabled?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   const floated = focused || value.length > 0;
@@ -72,12 +76,21 @@ function Field({
         type={type}
         autoComplete={autoComplete}
         aria-label={label}
+        aria-describedby={hint ? `${type}-hint` : undefined}
+        required
+        disabled={disabled}
+        maxLength={type === "password" ? 128 : 320}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         className="w-full bg-transparent pl-7 text-sm outline-none"
       />
+      {hint ? (
+        <span id={`${type}-hint`} className="mt-2 block pl-7 text-xs text-muted-foreground">
+          {hint}
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -124,7 +137,20 @@ function Auth() {
             className="mt-7 grid gap-3"
             onSubmit={async (e) => {
               e.preventDefault();
+              if (pending) return;
               setError(null);
+              if (!email.trim() || !password) {
+                setError("Enter your email address and password.");
+                return;
+              }
+              if (mode === "register" && password.length < 12) {
+                setError("Use at least 12 characters for your new password.");
+                return;
+              }
+              if (password.length > 128) {
+                setError("Your password must be 128 characters or fewer.");
+                return;
+              }
               setPending(true);
               try {
                 const authenticatedUser =
@@ -152,6 +178,7 @@ function Auth() {
               autoComplete="email"
               value={email}
               onChange={setEmail}
+              disabled={pending}
             />
             <Field
               icon={Lock}
@@ -160,6 +187,12 @@ function Auth() {
               autoComplete={mode === "register" ? "new-password" : "current-password"}
               value={password}
               onChange={setPassword}
+              disabled={pending}
+              hint={
+                mode === "register"
+                  ? "Use 12–128 characters for your new password."
+                  : "Enter the password you used when creating your account."
+              }
             />
             {error ? (
               <p role="alert" className="text-sm text-warning">
@@ -169,7 +202,7 @@ function Auth() {
 
             <button
               type="submit"
-              disabled={pending || !email.trim() || password.length < 12}
+              disabled={pending}
               className="press mt-2 flex items-center justify-center gap-2 rounded-2xl aurora py-4 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-glow)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {pending ? "Please wait…" : copy.cta} <ArrowRight className="size-4" />
@@ -195,6 +228,7 @@ function Auth() {
           {mode === "register" ? "Already have an account? " : "New to VisionVitals? "}
           <button
             type="button"
+            disabled={pending}
             onClick={() => {
               setError(null);
               setMode(mode === "register" ? "login" : "register");
