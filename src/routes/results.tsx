@@ -1,3 +1,5 @@
+import { OpticalMeasurements } from "@/components/vv/optical-measurements";
+import type { VisionAnalysis } from "@/lib/vision-api";
 import { AdditionalMeasurements } from "@/components/vv/supplemental-metrics";
 import { CameraMeasurements } from "@/components/vv/camera-metrics";
 import { ReportDate } from "@/components/vv/report-date";
@@ -31,7 +33,9 @@ export const Route = createFileRoute("/results")({
 });
 
 function Results() {
-  const analysis = Route.useLoaderData();
+  const loaded = Route.useLoaderData();
+  const [updated, setUpdated] = useState<VisionAnalysis | null>(null);
+  const analysis = updated && updated.id === loaded?.id ? updated : loaded;
   const result = analysis?.result;
   const [open, setOpen] = useState<string | null>(null);
 
@@ -96,6 +100,12 @@ function Results() {
           </div>
         </div>
       </GlassCard>
+
+      <OpticalMeasurements
+        id={analysis.id}
+        report={result.optical_metrics ?? null}
+        onSaved={setUpdated}
+      />
 
       {result.supplemental_metrics ? (
         <AdditionalMeasurements report={result.supplemental_metrics} />

@@ -7,3 +7,8 @@ Runtime @mediapipe/tasks-vision is pinned in package-lock.json. Its unmodified W
 assets are copied to public/mediapipe/1.2.0 by scripts/copy-pose-assets.mjs.
 Only image-plane landmarks are used. Model world coordinates are not calibrated
 height, circumference, mass, vital signs or clinical joint measurements.
+
+Face Landmarker float16 model, revision 1 (MediaPipe / Google, Apache 2.0):
+https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+SHA256: 64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff
+Used for image geometry only, not identification or clinical measurements.

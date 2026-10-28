@@ -56,6 +56,8 @@ export const unsupportedMeasurements = [
 
 export function remainingMeasurements(result: NonNullable<VisionAnalysis["result"]>) {
   const provided = new Set<string>(result.supplemental_metrics?.metrics.map((m) => m.key) ?? []);
+  if (result.optical_metrics?.pulse) provided.add("heart-rate");
+  if (result.optical_metrics?.face) provided.add("symmetry");
   return unsupportedMeasurements.filter((m) => !provided.has(m.key));
 }
 
@@ -87,6 +89,15 @@ export function reportText(analysis: VisionAnalysis): string {
           ...result.camera_metrics.limitations.map((note) => `Measurement limitation: ${note}`),
         ]
       : ["This older report has no recorded body landmarks. Take a new scan."]),
+    "Automatic camera estimates (experimental):",
+    ...Object.entries(result.optical_metrics ?? {}).flatMap(([kind, m]) =>
+      m
+        ? [
+            `${kind === "pulse" ? "Camera heart rate" : "Face symmetry difference"}: ${m.value === null ? "Unable to estimate" : `${m.value} ${m.unit}`}. ${m.reason}`,
+            `Method: ${m.method}. Source: ${m.source}. Captured: ${m.captured_at}`,
+          ]
+        : [],
+    ),
     "Readings and reference estimates:",
     ...(result.supplemental_metrics?.metrics.map(
       (m) =>

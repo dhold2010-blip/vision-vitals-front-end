@@ -1,3 +1,4 @@
+import { isOpticalMetrics, type OpticalMetrics } from "./optical-types";
 import { isSupplementalMetrics, type SupplementalMetrics } from "./measurement-inputs";
 export type CameraMetric = {
   key: string;
@@ -41,6 +42,7 @@ export type VisionAnalysis = {
     visual_assessment?: VisualAssessment | null;
     camera_metrics?: CameraMetrics | null;
     supplemental_metrics?: SupplementalMetrics | null;
+    optical_metrics?: OpticalMetrics | null;
   } | null;
 };
 
@@ -114,6 +116,8 @@ export function isAnalysis(value: unknown): value is VisionAnalysis {
   const result = value["result"];
   if (result === null) return true;
   if (!isRecord(result)) return false;
+  const optical = result["optical_metrics"];
+  if (optical !== undefined && optical !== null && !isOpticalMetrics(optical)) return false;
   const supplemental = result["supplemental_metrics"];
   if (supplemental !== undefined && supplemental !== null && !isSupplementalMetrics(supplemental))
     return false;
