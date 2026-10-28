@@ -106,7 +106,7 @@ export function PageHeader({
   subtitle,
   right,
 }: {
-  eyebrow?: string;
+  eyebrow?: ReactNode;
   title: string;
   subtitle?: string;
   right?: ReactNode;

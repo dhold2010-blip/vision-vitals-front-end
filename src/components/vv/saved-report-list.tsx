@@ -1,3 +1,4 @@
+import { ReportDate } from "@/components/vv/report-date";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { GlassCard } from "./glass-card";
@@ -45,9 +46,7 @@ export function SavedReportList({
         {visible.map((report) => (
           <GlassCard as="li" key={report.id} className="p-5">
             <Link to="/results" search={{ id: report.id }} className="block">
-              <h2 className="text-sm font-semibold">
-                {new Date(report.created_at).toLocaleString()}
-              </h2>
+              <h2 className="text-sm font-semibold">{<ReportDate value={report.created_at} />}</h2>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                 {report.result?.observation ?? "No observations available."}
               </p>

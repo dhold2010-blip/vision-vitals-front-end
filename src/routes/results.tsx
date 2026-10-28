@@ -1,3 +1,4 @@
+import { ReportDate } from "@/components/vv/report-date";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronDown, Download, RefreshCw } from "lucide-react";
 import { useState } from "react";
@@ -62,7 +63,7 @@ function Results() {
   return (
     <AppShell>
       <PageHeader
-        eyebrow={new Date(analysis.created_at).toLocaleString()}
+        eyebrow={<ReportDate value={analysis.created_at} />}
         title="Your photo report"
         subtitle={
           unavailable

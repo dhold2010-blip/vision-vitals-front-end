@@ -1,3 +1,4 @@
+import { ReportDate } from "@/components/vv/report-date";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
@@ -48,9 +49,7 @@ function Home() {
         {reports.slice(0, 3).map((report) => (
           <GlassCard key={report.id} className="p-5">
             <Link to="/results" search={{ id: report.id }}>
-              <p className="text-sm font-semibold">
-                {new Date(report.created_at).toLocaleString()}
-              </p>
+              <p className="text-sm font-semibold">{<ReportDate value={report.created_at} />}</p>
               <p className="mt-2 text-sm text-muted-foreground">
                 {report.result?.observation ?? "No observations available."}
               </p>
