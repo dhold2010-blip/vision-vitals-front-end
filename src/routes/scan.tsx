@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Backdrop } from "@/components/vv/app-shell";
 import { scanStages } from "@/lib/vitals";
 import { getCurrentUser } from "@/lib/auth";
-import { captureVision, type VisionCaptureResult } from "@/lib/vision-vitals";
+import { captureVision } from "@/lib/vision-vitals";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/scan")({
@@ -35,6 +35,8 @@ function ScanScreen() {
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraVersion, setCameraVersion] = useState(0);
   const [torch, setTorch] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
@@ -42,11 +44,12 @@ function ScanScreen() {
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
   const captureCurrentFrame = useCallback(async () => {
     const video = videoRef.current;
-    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+    if (!streamRef.current?.active || !video || video.videoWidth === 0 || video.videoHeight === 0) {
       throw new Error("The camera frame is not ready. Please retry the scan.");
     }
 
@@ -74,8 +77,6 @@ function ScanScreen() {
     });
     const formData = new FormData();
     formData.append("image", image);
-    formData.append("image_width", String(canvas.width));
-    formData.append("image_height", String(canvas.height));
 
     return captureVision({ data: formData });
   }, []);
@@ -83,6 +84,8 @@ function ScanScreen() {
   useEffect(() => {
     let cancelled = false;
     async function start() {
+      setCameraReady(false);
+      setCameraError(null);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 1920 } },
@@ -97,11 +100,17 @@ function ScanScreen() {
         setCameraError(null);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => undefined);
+          await videoRef.current.play();
+          if (!cancelled) setCameraReady(true);
         }
       } catch {
-        if (!cancelled)
-          setCameraError("Camera access is blocked. You can still run a simulated scan.");
+        if (!cancelled) {
+          stop();
+          setCameraReady(false);
+          setCameraError(
+            "Camera access is unavailable. Allow camera access, then tap Restart scan.",
+          );
+        }
       }
     }
     void start();
@@ -109,43 +118,56 @@ function ScanScreen() {
       cancelled = true;
       stop();
     };
-  }, [facing, stop]);
+  }, [facing, cameraVersion, stop]);
 
   useEffect(() => {
     if (phase === "idle") return;
     const id = window.setInterval(() => {
       setProgress((p) => {
         const next = p + (phase === "scanning" ? 1.6 : 2.4);
-        return next >= 100 ? 100 : next;
+        return Math.min(next, phase === "scanning" ? 100 : 95);
       });
     }, 60);
     return () => window.clearInterval(id);
   }, [phase]);
 
   useEffect(() => {
-    if (progress < 100) return;
-    if (phase === "scanning") {
+    if (phase === "scanning" && progress >= 100) {
       setProgress(0);
       setPhase("analyzing");
-    } else if (phase === "analyzing") {
-      setCaptureError(null);
-      void captureCurrentFrame()
-        .then((result) => {
-          stop();
-          navigate({ to: "/results", state: { result } });
-        })
-        .catch((error: unknown) => {
-          stop();
-          const message =
-            error instanceof Error
-              ? error.message
-              : "The scan could not be completed. Please try again.";
-          setCaptureError(message);
-          setPhase("idle");
-          setProgress(0);
-        });
     }
-  }, [captureCurrentFrame, navigate, phase, progress, stop]);
+  }, [phase, progress]);
+
+  useEffect(() => {
+    if (phase !== "analyzing") return;
+    let cancelled = false;
+    void captureCurrentFrame()
+      .then((result) => {
+        if (cancelled) return;
+        stop();
+        void navigate({ to: "/results", state: { result } });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const message =
+          error instanceof Error
+            ? error.message
+            : "The scan could not be completed. Please try again.";
+        // Keep the camera live so a rejected image can be captured again.
+        setCaptureError(message);
+        setPhase("idle");
+        setProgress(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [captureCurrentFrame, navigate, phase, stop]);
+
+  const resetScan = () => {
+    setPhase("idle");
+    setProgress(0);
+    setCaptureError(null);
+  };
 
   const stageIndex = Math.min(
     scanStages.length - 1,
@@ -238,7 +260,11 @@ function ScanScreen() {
           <button
             type="button"
             aria-label="Flip camera"
-            onClick={() => setFacing((f) => (f === "user" ? "environment" : "user"))}
+            onClick={() => {
+              resetScan();
+              setCameraReady(false);
+              setFacing((f) => (f === "user" ? "environment" : "user"));
+            }}
             className="press glass grid size-14 place-items-center rounded-2xl"
           >
             <SwitchCamera className="size-5" />
@@ -248,14 +274,15 @@ function ScanScreen() {
             type="button"
             onClick={() => {
               if (phase === "idle") {
+                setCaptureError(null);
                 setProgress(0);
                 setPhase("scanning");
               } else {
-                setPhase("idle");
-                setProgress(0);
+                resetScan();
               }
             }}
             className="press relative grid size-20 place-items-center rounded-full aurora shadow-[var(--shadow-glow)]"
+            disabled={phase === "idle" && !cameraReady}
             aria-label={phase === "idle" ? "Start scan" : "Cancel scan"}
           >
             <span className="animate-pulse-ring absolute inset-0 rounded-full border border-secondary/60" />
@@ -270,8 +297,9 @@ function ScanScreen() {
             type="button"
             aria-label="Restart scan"
             onClick={() => {
-              setPhase("idle");
-              setProgress(0);
+              resetScan();
+              setCameraReady(false);
+              setCameraVersion((version) => version + 1);
             }}
             className="press glass grid size-14 place-items-center rounded-2xl"
           >

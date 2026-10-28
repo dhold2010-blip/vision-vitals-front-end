@@ -28,7 +28,7 @@ const accessCookie = "vv_access";
 const refreshCookie = "vv_refresh";
 
 function backendUrl(): string {
-  const value = process.env.VISION_VITALS_BACKEND_URL;
+  const value = process.env["VISION_VITALS_BACKEND_URL"];
   if (!value?.trim()) throw new Error("Authentication service is not configured.");
   return value.trim().replace(/\/$/, "");
 }
@@ -36,7 +36,7 @@ function backendUrl(): string {
 function cookieOptions() {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env["NODE_ENV"] === "production",
     sameSite: "strict" as const,
     path: "/",
   };
