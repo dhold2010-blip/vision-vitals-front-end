@@ -4,6 +4,8 @@ export type AuthUser = {
   id: string;
   email: string;
   role: "USER" | "ADMIN";
+  display_name?: string | null;
+  timezone?: string | null;
 };
 
 export const registerAccount = createServerFn({ method: "POST" })

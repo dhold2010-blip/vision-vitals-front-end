@@ -3,10 +3,15 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { ComponentType, ReactNode } from "react";
 const { location } = vi.hoisted(() => ({ location: { state: {} as Record<string, unknown> } }));
 vi.mock("@tanstack/react-router", () => ({
-  createFileRoute: () => (options: unknown) => ({ options }),
+  createFileRoute: () => (options: unknown) => ({
+    options,
+    useLoaderData: () => location.state["result"],
+  }),
   useLocation: () => location,
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
 }));
+vi.mock("@/lib/account", () => ({ requireAccount: vi.fn() }));
+vi.mock("@/lib/saved-reports", () => ({ getSavedReport: vi.fn() }));
 vi.mock("@/components/vv/app-shell", () => ({
   AppShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
   PageHeader: ({ title, subtitle }: { title: string; subtitle: string }) => (

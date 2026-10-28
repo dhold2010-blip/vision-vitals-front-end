@@ -1,20 +1,20 @@
-import { createFileRoute, Link, useLocation } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronDown, Download, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { AppShell, PageHeader } from "@/components/vv/app-shell";
 import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
 import { ProgressRing } from "@/components/vv/progress";
-import type { VisionAnalysis } from "@/lib/vision-api";
-import { reportText, unsupportedMeasurements } from "@/lib/scan-report";
+import { requireAccount } from "@/lib/account";
+import { getSavedReport } from "@/lib/saved-reports";
+import { downloadReport, unsupportedMeasurements } from "@/lib/scan-report";
 import { cn } from "@/lib/utils";
 
-declare module "@tanstack/history" {
-  interface HistoryState {
-    result?: VisionAnalysis;
-  }
-}
-
 export const Route = createFileRoute("/results")({
+  beforeLoad: requireAccount,
+  validateSearch: (search: Record<string, unknown>): { id?: string } =>
+    typeof search["id"] === "string" ? { id: search["id"] } : {},
+  loaderDeps: ({ search }) => ({ id: search.id }),
+  loader: ({ deps }) => (deps.id ? getSavedReport({ data: deps.id }) : null),
   head: () => ({
     meta: [
       { title: "Scan results — VisionVitals AI" },
@@ -28,8 +28,7 @@ export const Route = createFileRoute("/results")({
 });
 
 function Results() {
-  const location = useLocation();
-  const analysis = location.state?.result;
+  const analysis = Route.useLoaderData();
   const result = analysis?.result;
   const [open, setOpen] = useState<string | null>(null);
 
@@ -59,16 +58,6 @@ function Results() {
       ]
     : [];
   const notes = [...new Set([...result.warnings, ...result.limitations])];
-
-  const downloadReport = () => {
-    const blob = new Blob([reportText(analysis)], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "VisionVitals-photo-report.txt";
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
 
   return (
     <AppShell>
@@ -207,7 +196,7 @@ function Results() {
         </Link>
         <button
           type="button"
-          onClick={downloadReport}
+          onClick={() => downloadReport(analysis)}
           className="press aurora flex items-center justify-center gap-2 rounded-3xl p-4 text-sm font-semibold text-primary-foreground"
         >
           <Download className="size-4" />

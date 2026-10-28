@@ -76,7 +76,7 @@ export function validateScanImage(data: unknown): FormData {
   return data;
 }
 
-function isAnalysis(value: unknown): value is VisionAnalysis {
+export function isAnalysis(value: unknown): value is VisionAnalysis {
   if (!isRecord(value)) return false;
   if (
     !["id", "status", "created_at", "updated_at"].every((key) => typeof value[key] === "string")

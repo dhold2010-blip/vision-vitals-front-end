@@ -73,5 +73,8 @@ measurements. The live results route displays the backend's photo-specific frami
 lighting, and visible posture observations, capture tips, and explicit availability
 labels for unsupported measurements. Older results retain their summary and can be
 rescanned for the detailed report. Confidence is not presented as a health score.
-Download report produces a text file containing the actual report. The remaining
-sample dashboards are labeled as sample data; they are not populated by the scan.
+Download report produces a text file containing the actual report. Home, History, and Reports now load the signed-in account’s saved analyses. Profile
+editing saves the display name to the backend, with email as the fallback. Protected
+routes require sign-in and saved reports open through `/results?id=<analysis-id>`.
+Settings signs out the backend session and clears local cookies. Unsupported demo
+preferences, subscriptions, charts, and sample health readings have been removed.

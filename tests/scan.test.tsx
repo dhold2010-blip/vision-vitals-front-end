@@ -65,7 +65,7 @@ it("keeps the camera usable after rejection and can successfully retry", async (
   expect(capture).toHaveBeenCalledTimes(2);
   expect(navigate).toHaveBeenCalledWith({
     to: "/results",
-    state: { result: { id: "analysis-2", result: null } },
+    search: { id: "analysis-2" },
   });
 });
 
@@ -113,4 +113,46 @@ it("recovers camera permission on restart and prevents scanning without a camera
   });
   expect((screen.getByLabelText("Start scan") as HTMLButtonElement).disabled).toBe(false);
   expect(screen.queryByText(/Allow camera access/)).toBeNull();
+});
+
+it("releases the camera when the scanner is closed", async () => {
+  await openCamera();
+  cleanup();
+  expect(stop).toHaveBeenCalled();
+});
+it("switches camera facing and starts a new stream", async () => {
+  await openCamera();
+  await act(async () => fireEvent.click(screen.getByLabelText("Flip camera")));
+  expect(getUserMedia).toHaveBeenLastCalledWith(
+    expect.objectContaining({ video: expect.objectContaining({ facingMode: "environment" }) }),
+  );
+  expect(stop).toHaveBeenCalled();
+});
+it("does not pretend to offer a torch on unsupported hardware", async () => {
+  await openCamera();
+  expect((screen.getByLabelText("Toggle torch") as HTMLButtonElement).disabled).toBe(true);
+});
+it("sends torch changes to supported hardware", async () => {
+  const applyConstraints = vi.fn().mockResolvedValue(undefined);
+  getUserMedia.mockResolvedValue({
+    getTracks: () => [{ stop }],
+    getVideoTracks: () => [{ getCapabilities: () => ({ torch: true }), applyConstraints }],
+  });
+  await openCamera();
+  await act(async () => fireEvent.click(screen.getByLabelText("Toggle torch")));
+  expect(applyConstraints).toHaveBeenCalledWith({ advanced: [{ torch: true }] });
+  expect(screen.getByLabelText("Toggle torch").getAttribute("aria-pressed")).toBe("true");
+});
+it("handles a frame encoding failure without sending an empty photo", async () => {
+  vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => callback(null));
+  await openCamera();
+  await startScan();
+  expect(capture).not.toHaveBeenCalled();
+  expect(screen.getByText("The camera image could not be created.")).toBeTruthy();
+});
+it("does not enable capture when video playback fails", async () => {
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(new Error("blocked"));
+  await openCamera();
+  expect((screen.getByLabelText("Start scan") as HTMLButtonElement).disabled).toBe(true);
+  expect(stop).toHaveBeenCalled();
 });

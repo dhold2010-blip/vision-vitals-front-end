@@ -77,3 +77,16 @@ export function reportText(analysis: VisionAnalysis): string {
     "This is an AI description of a photo, not a medical measurement or diagnosis.",
   ].join("\n\n");
 }
+
+export function downloadReport(analysis: VisionAnalysis): void {
+  const url = URL.createObjectURL(
+    new Blob([reportText(analysis)], { type: "text/plain;charset=utf-8" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `VisionVitals-report-${analysis.id}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

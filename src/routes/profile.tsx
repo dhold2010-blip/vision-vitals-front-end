@@ -1,96 +1,85 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronLeft, Pencil, Target } from "lucide-react";
-import { toast } from "sonner";
-import { AppShell } from "@/components/vv/app-shell";
-import { Chip, GlassCard, SectionTitle } from "@/components/vv/glass-card";
-import { ProgressBar } from "@/components/vv/progress";
-import { profile } from "@/lib/vitals";
-
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { useState } from "react";
+import { AppShell, PageHeader } from "@/components/vv/app-shell";
+import { GlassCard } from "@/components/vv/glass-card";
+import { requireAccount, accountName, accountInitials } from "@/lib/account";
+import { updateDisplayName } from "@/lib/saved-reports";
 export const Route = createFileRoute("/profile")({
-  head: () => ({
-    meta: [
-      { title: "Your profile — VisionVitals AI" },
-      {
-        name: "description",
-        content:
-          "Your avatar, age, gender, height, weight and body goals used to calibrate every AI scan.",
-      },
-      { property: "og:title", content: "Your profile — VisionVitals AI" },
-      { property: "og:description", content: "Profile details that calibrate your scans." },
-    ],
-  }),
+  beforeLoad: requireAccount,
+  head: () => ({ meta: [{ title: "Your profile — VisionVitals" }] }),
   component: Profile,
 });
-
-const facts = [
-  { label: "Age", value: `${profile.age}` },
-  { label: "Gender", value: profile.gender },
-  { label: "Height", value: `${profile.height} cm` },
-  { label: "Weight", value: `${profile.weight} kg` },
-];
-
 function Profile() {
+  const { user } = Route.useRouteContext();
+  const router = useRouter();
+  const [name, setName] = useState(user.display_name ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   return (
     <AppShell>
-      <div className="animate-rise mb-6 flex items-center justify-between">
-        <Link
-          to="/settings"
-          aria-label="Back"
-          className="press glass grid size-10 place-items-center rounded-full"
-        >
-          <ChevronLeft className="size-4" />
-        </Link>
-        <button
-          type="button"
-          onClick={() => toast("Profile editor opened")}
-          className="press glass flex items-center gap-2 rounded-full px-4 py-2.5 text-xs font-medium"
-        >
-          <Pencil className="size-3.5 text-secondary" /> Edit
-        </button>
-      </div>
-
-      <GlassCard className="animate-scale-in p-7 text-center">
-        <span className="mx-auto grid size-24 place-items-center rounded-[32px] aurora text-2xl font-extrabold text-primary-foreground">
-          {profile.name
-            .split(" ")
-            .map((n) => n[0])
-            .join("")}
+      <PageHeader title="Your profile" subtitle="Your account details" />
+      <GlassCard className="p-6">
+        <span className="aurora grid size-16 place-items-center rounded-2xl text-xl font-bold">
+          {accountInitials(user)}
         </span>
-        <h1 className="mt-5 text-2xl font-extrabold tracking-tight">{profile.name}</h1>
-        <p className="text-sm text-muted-foreground">
-          {profile.handle} · {profile.plan}
-        </p>
-        <div className="mt-5 flex flex-wrap justify-center gap-2">
-          <Chip active>{profile.streak} day streak</Chip>
-          <Chip>Mesomorph</Chip>
-        </div>
+        <h2 className="mt-4 break-words text-xl font-semibold">{accountName(user)}</h2>
+        <p className="mt-2 break-words text-sm text-muted-foreground">{user.email}</p>
+        <form
+          className="mt-6 grid gap-4"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (pending) return;
+            setPending(true);
+            setSaved(false);
+            setError(null);
+            try {
+              await updateDisplayName({ data: name });
+              await router.invalidate();
+              setSaved(true);
+            } catch (reason) {
+              setError(reason instanceof Error ? reason.message : "Your name could not be saved.");
+            } finally {
+              setPending(false);
+            }
+          }}
+        >
+          <label className="text-sm">
+            Display name
+            <input
+              aria-label="Display name"
+              autoComplete="name"
+              maxLength={120}
+              disabled={pending}
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value);
+                setSaved(false);
+              }}
+              className="glass mt-2 w-full rounded-xl p-3"
+            />
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Leave blank to display your email address. This name is saved to your account.
+          </p>
+          {error ? (
+            <p role="alert" className="text-sm text-warning">
+              {error}
+            </p>
+          ) : null}
+          {saved ? (
+            <p role="status" className="text-sm text-secondary">
+              Profile saved.
+            </p>
+          ) : null}
+          <button disabled={pending} type="submit" className="aurora rounded-2xl p-4 font-semibold">
+            {pending ? "Saving…" : "Save profile"}
+          </button>
+        </form>
       </GlassCard>
-
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {facts.map((f) => (
-          <GlassCard key={f.label} className="p-4 text-center">
-            <p className="text-lg font-bold tracking-tight tabular-nums">{f.value}</p>
-            <p className="text-[11px] text-muted-foreground">{f.label}</p>
-          </GlassCard>
-        ))}
-      </div>
-
-      <SectionTitle className="mt-8 mb-3" title="Goal" />
-      <GlassCard className="p-5">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-white/6">
-            <Target className="size-4 text-secondary" />
-          </span>
-          <div>
-            <p className="text-sm font-semibold">{profile.goal}</p>
-            <p className="text-xs text-muted-foreground">4.4 kg to go · on track for 18 June</p>
-          </div>
-        </div>
-        <div className="mt-5 grid gap-3">
-          <ProgressBar value={62} label="Goal progress" tone="success" />
-          <ProgressBar value={78} label="Weekly consistency" tone="secondary" />
-        </div>
-      </GlassCard>
+      <Link to="/settings" className="mt-5 inline-block text-secondary">
+        Account settings
+      </Link>
     </AppShell>
   );
 }

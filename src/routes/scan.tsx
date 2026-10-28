@@ -38,6 +38,7 @@ function ScanScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraVersion, setCameraVersion] = useState(0);
   const [torch, setTorch] = useState(false);
+  const [torchAvailable, setTorchAvailable] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
 
@@ -84,6 +85,8 @@ function ScanScreen() {
   useEffect(() => {
     let cancelled = false;
     async function start() {
+      setTorch(false);
+      setTorchAvailable(false);
       setCameraReady(false);
       setCameraError(null);
       try {
@@ -97,6 +100,10 @@ function ScanScreen() {
         }
         stop();
         streamRef.current = stream;
+        const track = stream.getVideoTracks?.()[0];
+        const capabilities = track?.getCapabilities?.() as
+          (MediaTrackCapabilities & { torch?: boolean }) | undefined;
+        setTorchAvailable(capabilities?.torch === true);
         setCameraError(null);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -145,7 +152,7 @@ function ScanScreen() {
       .then((result) => {
         if (cancelled) return;
         stop();
-        void navigate({ to: "/results", state: { result } });
+        void navigate({ to: "/results", search: { id: result.id } });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -199,9 +206,26 @@ function ScanScreen() {
             type="button"
             aria-label="Toggle torch"
             aria-pressed={torch}
-            onClick={() => setTorch((t) => !t)}
+            disabled={!cameraReady || !torchAvailable}
+            title={
+              torchAvailable
+                ? "Toggle camera light"
+                : "Camera light is not supported by this camera"
+            }
+            onClick={async () => {
+              const track = streamRef.current?.getVideoTracks()[0];
+              if (!track) return;
+              try {
+                await track.applyConstraints({
+                  advanced: [{ torch: !torch } as MediaTrackConstraintSet],
+                });
+                setTorch(!torch);
+              } catch {
+                setCaptureError("The camera light could not be changed on this device.");
+              }
+            }}
             className={cn(
-              "press glass grid size-10 place-items-center rounded-full",
+              "press glass grid size-10 place-items-center rounded-full disabled:opacity-40",
               torch && "border-warning/50 text-warning",
             )}
           >

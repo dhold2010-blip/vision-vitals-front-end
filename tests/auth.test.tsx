@@ -15,6 +15,7 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => ({ options }),
   useNavigate: () => navigate,
+  useRouter: () => ({ options: {}, invalidate: async () => {} }),
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
@@ -54,7 +55,7 @@ it("does not silently disable sign-in for a short existing password", async () =
   expect(login).toHaveBeenCalledWith({
     data: { email: "person@example.com", password: "existing" },
   });
-  expect(navigate).toHaveBeenCalledWith({ to: "/" });
+  expect(navigate).toHaveBeenCalledWith({ to: "/", replace: true });
 });
 it("explains the signup password requirement and does not submit an invalid password", async () => {
   await showAuth();
@@ -75,7 +76,7 @@ it("submits valid signup details and navigates after account creation", async ()
   fill("correct horse battery staple");
   await submit();
   expect(register).toHaveBeenCalledOnce();
-  expect(navigate).toHaveBeenCalledWith({ to: "/" });
+  expect(navigate).toHaveBeenCalledWith({ to: "/", replace: true });
 });
 it("shows login rejection and allows another attempt", async () => {
   login.mockRejectedValue(new Error("Email or password is incorrect."));

@@ -81,8 +81,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "VisionVitals AI" },
       {
         name: "description",
-        content:
-          "AI-powered camera body and health analysis with instant vitals, trends and reports.",
+        content: "Camera photo observations with saved reports and clear measurement limitations.",
       },
       { name: "theme-color", content: "#050816" },
       { property: "og:site_name", content: "VisionVitals AI" },

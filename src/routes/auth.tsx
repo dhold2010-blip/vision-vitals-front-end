@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { ArrowRight, Lock, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -103,6 +103,7 @@ function Auth() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const navigate = useNavigate();
+  const router = useRouter();
 
   useEffect(() => {
     void getCurrentUser()
@@ -159,7 +160,9 @@ function Auth() {
                     : await loginAccount({ data: { email, password } });
                 setUser(authenticatedUser);
                 toast.success(mode === "register" ? "Account created" : "Signed in");
-                void navigate({ to: "/" });
+                router.options.context?.queryClient.clear();
+                await navigate({ to: "/", replace: true });
+                await router.invalidate();
               } catch (reason) {
                 setError(
                   reason instanceof Error
@@ -214,9 +217,15 @@ function Auth() {
               type="button"
               className="press mt-4 w-full rounded-2xl border border-border py-3 text-sm"
               onClick={async () => {
-                await logoutAccount();
+                const result = await logoutAccount();
                 setUser(null);
-                toast.success("Signed out");
+                router.options.context?.queryClient.clear();
+                await router.invalidate();
+                if (result.serverRevoked) toast.success("Signed out");
+                else
+                  toast.warning(
+                    "Signed out on this device. Server sign-out could not be confirmed.",
+                  );
               }}
             >
               Sign out {user.email}

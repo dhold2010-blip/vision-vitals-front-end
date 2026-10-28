@@ -11,8 +11,7 @@ export const Route = createFileRoute("/onboarding")({
       { title: "How VisionVitals AI works" },
       {
         name: "description",
-        content:
-          "Three quick steps: an AI camera scan, a full body analysis, and privacy that keeps every scan on your device.",
+        content: "Learn how camera capture, visual observations, and server processing work.",
       },
       { property: "og:title", content: "How VisionVitals AI works" },
       { property: "og:description", content: "Scan, analyse, stay private — a 60 second tour." },
@@ -25,20 +24,20 @@ const steps = [
   {
     icon: ScanFace,
     eyebrow: "Step one",
-    title: "A scan that takes 14 seconds",
-    body: "Stand 1.5 metres from your camera. VisionVitals locks onto 68 facial landmarks and a full skeletal map, then holds focus while you breathe normally.",
+    title: "Capture one clear photo",
+    body: "Allow camera access, include the body parts you want described, and hold still while the app captures one photo.",
   },
   {
     icon: Activity,
     eyebrow: "Step two",
-    title: "Twelve vitals, one score",
-    body: "Estimated age, height, weight, BMI, body type, symmetry, posture, resting heart rate and skin tone — each with its own confidence reading.",
+    title: "Observations from your photo",
+    body: "See observations about framing, lighting, and visible body position. This scan does not measure clinical vitals or calculate a health score.",
   },
   {
     icon: Lock,
     eyebrow: "Step three",
-    title: "Your body stays yours",
-    body: "Frames are processed on device and discarded the moment your report is written. Nothing is uploaded, shared or sold. Ever.",
+    title: "Know where your photo goes",
+    body: "Your photo is uploaded to the VisionVitals backend and sent to Google Gemini for analysis. Reports are saved to your account; you can delete reports and their stored images from History.",
   },
 ];
 

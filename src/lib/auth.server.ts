@@ -74,6 +74,9 @@ async function requestJson<T>(
       ...(options.body ? { "Content-Type": "application/json" } : {}),
       ...options.headers,
     },
+    signal: AbortSignal.timeout(60000),
+  }).catch(() => {
+    throw new Error("The service could not be reached. Please try again shortly.");
   });
   const payload = (await response.json().catch(() => null)) as BackendEnvelope<T> | null;
   return { response, payload };
@@ -91,7 +94,8 @@ async function refreshAccessToken(): Promise<string | null> {
     },
   );
   if (!response.ok || !payload?.data?.tokens?.access_token) {
-    clearTokens();
+    if (response.status === 401 || response.status === 403) clearTokens();
+    else throw new Error("Authentication service is temporarily unavailable. Please retry.");
     return null;
   }
   storeTokens(payload.data.tokens);
@@ -103,7 +107,10 @@ async function currentSession(): Promise<{ user: AuthUser; accessToken: string }
   if (!accessToken && !getCookie(refreshCookie)) return null;
 
   const checkUser = async (token: string) =>
-    requestJson<{ user: BackendUser }>("/api/v1/users/me", {
+    requestJson<{
+      user: BackendUser;
+      profile: { display_name: string | null; timezone: string | null };
+    }>("/api/v1/users/me", {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -122,14 +129,23 @@ async function currentSession(): Promise<{ user: AuthUser; accessToken: string }
   }
   if (!result.response.ok || !result.payload?.data?.user) {
     if (result.response.status === 401) clearTokens();
-    if (result.response.status >= 500) {
+    if (result.response.status !== 401) {
       throw new Error("Authentication service is temporarily unavailable.");
     }
     return null;
   }
 
   const user = result.payload.data.user;
-  return { user: { id: user.id, email: user.email, role: user.role }, accessToken: token };
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      display_name: result.payload.data.profile?.display_name ?? null,
+      timezone: result.payload.data.profile?.timezone ?? null,
+    },
+    accessToken: token,
+  };
 }
 
 export async function requireUserAccessToken(): Promise<string> {
@@ -164,17 +180,40 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   return (await currentSession())?.user ?? null;
 }
 
-export async function logout(): Promise<{ loggedOut: true }> {
+export async function authenticatedRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = await requireUserAccessToken();
+  const { response, payload } = await requestJson<T>(path, {
+    ...options,
+    headers: { ...options.headers, Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok || !payload || payload.data === undefined) {
+    if (response.status === 401) throw new Error("Your session expired. Please sign in again.");
+    if (response.status === 403 || response.status === 404)
+      throw new Error("This report is unavailable or does not belong to your account.");
+    if (response.status === 429)
+      throw new Error("Too many requests. Please wait a minute and retry.");
+    throw new Error("The request could not be completed. Please retry.");
+  }
+  return payload.data;
+}
+
+export async function logout(): Promise<{ loggedOut: true; serverRevoked: boolean }> {
+  let serverRevoked = false;
   try {
     const session = await currentSession();
     if (session) {
-      await requestJson("/api/v1/auth/logout", {
+      const result = await requestJson("/api/v1/auth/logout", {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}` },
       });
+      serverRevoked = result.response.ok;
+    } else {
+      serverRevoked = true;
     }
+  } catch {
+    // Local sign-out must still complete during an outage.
   } finally {
     clearTokens();
   }
-  return { loggedOut: true };
+  return { loggedOut: true, serverRevoked };
 }
