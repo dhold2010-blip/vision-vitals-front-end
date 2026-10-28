@@ -6,6 +6,13 @@ import { scanStages } from "@/lib/vitals";
 import { getCurrentUser } from "@/lib/auth";
 import { captureVision } from "@/lib/vision-vitals";
 import { cn } from "@/lib/utils";
+import { MeasurementSetup } from "@/components/vv/measurement-setup";
+import { HeightReferenceCapture } from "@/components/vv/height-reference";
+import {
+  parseMeasurementFields,
+  type MeasurementFields,
+  type HeightReference,
+} from "@/lib/measurement-inputs";
 import { capturePose } from "@/lib/pose-capture";
 
 export const Route = createFileRoute("/scan")({
@@ -42,6 +49,39 @@ function ScanScreen() {
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
+  const [measurementFields, setMeasurementFields] = useState<MeasurementFields>({});
+  const [guidedHeight, setGuidedHeight] = useState(false);
+  const [referenceFrame, setReferenceFrame] = useState<{
+    url: string;
+    width: number;
+    height: number;
+  } | null>(null);
+  const referenceResolve = useRef<((value: HeightReference | null) => void) | null>(null);
+  const collectReference = useCallback(
+    (image: Blob, width: number, height: number, signal: AbortSignal) => {
+      signal.throwIfAborted();
+      const url = URL.createObjectURL(image);
+      setReferenceFrame({ url, width, height });
+      return new Promise<HeightReference | null>((resolve, reject) => {
+        const cleanup = () => {
+          URL.revokeObjectURL(url);
+          referenceResolve.current = null;
+          setReferenceFrame(null);
+          signal.removeEventListener("abort", cancel);
+        };
+        const cancel = () => {
+          cleanup();
+          reject(new Error("Scan cancelled"));
+        };
+        referenceResolve.current = (value) => {
+          cleanup();
+          resolve(value);
+        };
+        signal.addEventListener("abort", cancel, { once: true });
+      });
+    },
+    [],
+  );
 
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -49,43 +89,57 @@ function ScanScreen() {
     if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
-  const captureCurrentFrame = useCallback(async (signal: AbortSignal) => {
-    const video = videoRef.current;
-    if (!streamRef.current?.active || !video || video.videoWidth === 0 || video.videoHeight === 0) {
-      throw new Error("The camera frame is not ready. Please retry the scan.");
-    }
+  const captureCurrentFrame = useCallback(
+    async (signal: AbortSignal) => {
+      const video = videoRef.current;
+      if (
+        !streamRef.current?.active ||
+        !video ||
+        video.videoWidth === 0 ||
+        video.videoHeight === 0
+      ) {
+        throw new Error("The camera frame is not ready. Please retry the scan.");
+      }
 
-    const canvas = document.createElement("canvas");
-    const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
-    canvas.width = Math.round(video.videoWidth * scale);
-    canvas.height = Math.round(video.videoHeight * scale);
-    const context = canvas.getContext("2d");
-    if (!context) {
-      throw new Error("The browser could not prepare the camera image.");
-    }
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const canvas = document.createElement("canvas");
+      const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("The browser could not prepare the camera image.");
+      }
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const imageBlob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error("The camera image could not be created."));
-        },
-        "image/jpeg",
-        0.9,
-      );
-    });
-    const image = new File([imageBlob], "vision-vitals-camera.jpg", {
-      type: "image/jpeg",
-    });
-    const formData = new FormData();
-    formData.append("image", image);
-    const pose = await capturePose(canvas, signal);
-    signal.throwIfAborted();
-    formData.append("pose_capture", JSON.stringify(pose));
+      const imageBlob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("The camera image could not be created."));
+          },
+          "image/jpeg",
+          0.9,
+        );
+      });
+      const image = new File([imageBlob], "vision-vitals-camera.jpg", {
+        type: "image/jpeg",
+      });
+      const measurements = parseMeasurementFields(measurementFields);
+      if (guidedHeight) {
+        const reference = await collectReference(imageBlob, canvas.width, canvas.height, signal);
+        if (reference) measurements.height_reference = reference;
+      }
+      const formData = new FormData();
+      formData.append("image", image);
+      formData.append("measurement_inputs", JSON.stringify(measurements));
+      const pose = await capturePose(canvas, signal);
+      signal.throwIfAborted();
+      formData.append("pose_capture", JSON.stringify(pose));
 
-    return captureVision({ data: formData });
-  }, []);
+      return captureVision({ data: formData });
+    },
+    [measurementFields, guidedHeight, collectReference],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -201,6 +255,12 @@ function ScanScreen() {
   return (
     <div className="relative min-h-dvh overflow-hidden">
       <Backdrop />
+      {referenceFrame ? (
+        <HeightReferenceCapture
+          {...referenceFrame}
+          onComplete={(value) => referenceResolve.current?.(value)}
+        />
+      ) : null}
       <div className="relative mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-5 pt-6 pb-10">
         <div className="flex items-center justify-between">
           <Link
@@ -243,6 +303,14 @@ function ScanScreen() {
             <Zap className="size-4" />
           </button>
         </div>
+
+        <MeasurementSetup
+          fields={measurementFields}
+          onChange={setMeasurementFields}
+          guided={guidedHeight}
+          onGuidedChange={setGuidedHeight}
+          disabled={phase !== "idle"}
+        />
 
         <div className="relative mt-6 flex-1 overflow-hidden rounded-[36px] border border-white/12 bg-black/60 shadow-[var(--shadow-glass)]">
           <video
@@ -309,6 +377,14 @@ function ScanScreen() {
             type="button"
             onClick={() => {
               if (phase === "idle") {
+                try {
+                  parseMeasurementFields(measurementFields);
+                } catch (error) {
+                  setCaptureError(
+                    error instanceof Error ? error.message : "Check the optional measurements.",
+                  );
+                  return;
+                }
                 setCaptureError(null);
                 setProgress(0);
                 setPhase("scanning");

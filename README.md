@@ -99,3 +99,19 @@ longer than later scans; cached assets are reused by the browser.
 These are single-image 2D landmark estimates. Camera perspective/tilt and pose
 occlusion affect results. No clinical measurements, physical dimensions, pulse,
 body composition, or health/posture scores are inferred from appearance.
+
+### Guided reference height and entered readings
+
+The scanner's optional readings panel accepts age, measured height/weight and a
+pulse reading from a device. These values are saved with that report only and
+labeled `Entered by you`; they are not camera inferences. The server calculates
+adult BMI only when age is 20+ and measured height/weight are supplied. It does
+not classify health or body fat. Method: https://www.cdc.gov/bmi/adult-calculator/
+
+Guided height freezes the captured image and asks for a known vertical
+reference's top/bottom and the person's head/soles, plus the reference length
+and explicit same-distance/level-camera confirmation. A standing pose and
+usable geometry are required. The server uses the ratio of image heights and
+labels the result as a rough reference estimate. Perspective, incorrect setup,
+shoes/hair and marking error can bias it; accuracy is not clinically validated.
+The reference estimate is never substituted into BMI. Users can skip this step.

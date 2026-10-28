@@ -1,3 +1,4 @@
+import { AdditionalMeasurements } from "@/components/vv/supplemental-metrics";
 import { CameraMeasurements } from "@/components/vv/camera-metrics";
 import { ReportDate } from "@/components/vv/report-date";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -8,7 +9,7 @@ import { GlassCard, SectionTitle } from "@/components/vv/glass-card";
 import { ProgressRing } from "@/components/vv/progress";
 import { requireAccount } from "@/lib/account";
 import { getSavedReport } from "@/lib/saved-reports";
-import { downloadReport, unsupportedMeasurements } from "@/lib/scan-report";
+import { downloadReport, remainingMeasurements } from "@/lib/scan-report";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/results")({
@@ -96,6 +97,9 @@ function Results() {
         </div>
       </GlassCard>
 
+      {result.supplemental_metrics ? (
+        <AdditionalMeasurements report={result.supplemental_metrics} />
+      ) : null}
       <CameraMeasurements report={result.camera_metrics ?? null} />
 
       <SectionTitle className="mt-8 mb-3" title="Photo observations" />
@@ -124,7 +128,7 @@ function Results() {
         invented from appearance.
       </p>
       <ul className="grid gap-3">
-        {unsupportedMeasurements.map((item) => (
+        {remainingMeasurements(result).map((item) => (
           <GlassCard as="li" key={item.key} className="overflow-hidden">
             <button
               type="button"

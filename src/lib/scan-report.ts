@@ -1,3 +1,4 @@
+import { measurementSource } from "./measurement-inputs";
 import type { VisionAnalysis } from "./vision-api";
 
 // These are capability explanations, never substitute readings for a failed scan.
@@ -53,6 +54,11 @@ export const unsupportedMeasurements = [
   },
 ];
 
+export function remainingMeasurements(result: NonNullable<VisionAnalysis["result"]>) {
+  const provided = new Set<string>(result.supplemental_metrics?.metrics.map((m) => m.key) ?? []);
+  return unsupportedMeasurements.filter((m) => !provided.has(m.key));
+}
+
 export function reportText(analysis: VisionAnalysis): string {
   const result = analysis.result;
   if (!result) return "No analysis result is available.";
@@ -81,8 +87,13 @@ export function reportText(analysis: VisionAnalysis): string {
           ...result.camera_metrics.limitations.map((note) => `Measurement limitation: ${note}`),
         ]
       : ["This older report has no recorded body landmarks. Take a new scan."]),
+    "Readings and reference estimates:",
+    ...(result.supplemental_metrics?.metrics.map(
+      (m) =>
+        `${m.label}: ${m.value === null ? "Not available" : `${m.value} ${m.unit}`}. ${measurementSource(m)}. ${m.reason}`,
+    ) ?? []),
     "Measurements not available from this scan:",
-    ...unsupportedMeasurements.map((item) => `${item.label}: Not measured. ${item.reason}`),
+    ...remainingMeasurements(result).map((item) => `${item.label}: Not measured. ${item.reason}`),
     ...result.warnings.map((warning) => `Note: ${warning}`),
     ...result.limitations.map((limitation) => `Limitation: ${limitation}`),
     "This is an AI description of a photo, not a medical measurement or diagnosis.",

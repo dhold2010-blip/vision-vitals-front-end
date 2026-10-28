@@ -15,5 +15,6 @@ export const captureVision = createServerFn({ method: "POST" })
       userAccessToken,
       data.get("image") as File,
       data.get("pose_capture") as string | null,
+      data.get("measurement_inputs") as string | null,
     );
   });

@@ -1,3 +1,4 @@
+import { isSupplementalMetrics, type SupplementalMetrics } from "./measurement-inputs";
 export type CameraMetric = {
   key: string;
   label: string;
@@ -39,6 +40,7 @@ export type VisionAnalysis = {
     request_id: string;
     visual_assessment?: VisualAssessment | null;
     camera_metrics?: CameraMetrics | null;
+    supplemental_metrics?: SupplementalMetrics | null;
   } | null;
 };
 
@@ -95,6 +97,10 @@ export function validateScanImage(data: unknown): FormData {
   if (pose !== null && (typeof pose !== "string" || pose.length > 16000)) {
     throw new Error("The camera landmark data is invalid. Please retry the scan.");
   }
+  const measurements = data.get("measurement_inputs");
+  if (measurements !== null && (typeof measurements !== "string" || measurements.length > 4000)) {
+    throw new Error("The additional measurement data is invalid. Please retry the scan.");
+  }
   return data;
 }
 
@@ -108,6 +114,9 @@ export function isAnalysis(value: unknown): value is VisionAnalysis {
   const result = value["result"];
   if (result === null) return true;
   if (!isRecord(result)) return false;
+  const supplemental = result["supplemental_metrics"];
+  if (supplemental !== undefined && supplemental !== null && !isSupplementalMetrics(supplemental))
+    return false;
   const camera = result["camera_metrics"];
   if (camera !== undefined && camera !== null && !isCameraMetrics(camera)) return false;
   const visual = result["visual_assessment"];
@@ -142,11 +151,13 @@ export async function requestPhoneAnalysis(
   accessToken: string,
   image: File,
   poseCapture?: string | null,
+  measurementInputs?: string | null,
 ): Promise<VisionAnalysis> {
   const formData = new FormData();
   formData.append("image", image);
   formData.append("source", "APP_CAMERA");
   if (poseCapture) formData.append("pose_capture", poseCapture);
+  if (measurementInputs) formData.append("measurement_inputs", measurementInputs);
   let response: Response;
   try {
     response = await fetch(`${backendUrl.replace(/\/+$/, "")}/api/v1/analyses`, {

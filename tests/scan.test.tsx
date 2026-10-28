@@ -185,3 +185,52 @@ it("sends landmark metadata from the captured frame with the photo", async () =>
     height: 480,
   });
 });
+
+it("includes optional readings in the scan and rejects invalid inputs before capture", async () => {
+  capture.mockResolvedValue({ id: "readings-scan" });
+  await openCamera();
+  fireEvent.change(screen.getByLabelText(/Measured height \(cm\)/), { target: { value: "-1" } });
+  await startScan();
+  expect(capture).not.toHaveBeenCalled();
+  expect(screen.getByText(/Check measured height/)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText(/Measured height \(cm\)/), { target: { value: "170" } });
+  fireEvent.change(screen.getByLabelText(/Weight \(kg\)/), { target: { value: "65" } });
+  fireEvent.change(screen.getByLabelText(/Age \(years\)/), { target: { value: "30" } });
+  await startScan();
+  expect(JSON.parse(capture.mock.calls[0]![0].data.get("measurement_inputs"))).toEqual({
+    version: 1,
+    height_cm: 170,
+    weight_kg: 65,
+    age_years: 30,
+  });
+});
+
+it("waits for reference marking and can skip it without inventing a height", async () => {
+  const revoke = vi.fn();
+  const OriginalURL = URL;
+  vi.stubGlobal(
+    "URL",
+    class extends OriginalURL {
+      static createObjectURL = vi.fn(() => "blob:height-test");
+      static revokeObjectURL = revoke;
+    },
+  );
+  try {
+    capture.mockResolvedValue({ id: "reference-skip" });
+    await openCamera();
+    fireEvent.click(screen.getByLabelText("Guided reference-based height estimate"));
+    await startScan();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(capture).not.toHaveBeenCalled();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Skip height estimate" })),
+    );
+    expect(capture).toHaveBeenCalledOnce();
+    expect(JSON.parse(capture.mock.calls[0]![0].data.get("measurement_inputs"))).toEqual({
+      version: 1,
+    });
+    expect(revoke).toHaveBeenCalledWith("blob:height-test");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
