@@ -21,6 +21,18 @@ Vision Vitals is a camera-based wellness and visual-insight application. The fro
 - `src/lib/` — shared utilities and application logic
 - `public/` — static assets
 
+## Environment configuration
+
+Copy `.env.example` to `.env` for local development and set these exact keys:
+
+- `VISION_VITALS_BACKEND_URL` — base URL of the Vision Vitals backend, without an API path suffix (for example, `http://localhost:8000` locally).
+- `VISION_VITALS_DEVICE_ID` — ID returned when the device is registered with the backend.
+- `VISION_VITALS_DEVICE_CREDENTIAL` — device secret returned at registration; keep it private.
+
+These values are read by server-side code; do not rename the keys or expose the device credential as a `VITE_*` client variable. For deployed environments, set the same names in the hosting provider's server/runtime environment settings and redeploy/restart the frontend. The backend URL must point to the running API, and the API must use the database that received its migrations.
+
+The backend owns the `users` database table; the frontend authenticates through backend API endpoints and does not query that table directly. If an error literally says a database table named `user` is not configured, check which service emits it: that exact message is not present in this frontend repository.
+
 ## Development
 
 Install dependencies with your package manager, then run:
