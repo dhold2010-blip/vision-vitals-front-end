@@ -30,7 +30,9 @@ function SettingsScreen() {
       <GlassCard className="space-y-3 p-5 text-sm leading-relaxed text-muted-foreground">
         <p>
           When you start a scan, one camera image is uploaded to the VisionVitals backend and sent
-          to Google Gemini for visual analysis. Processing is not performed entirely on your phone.
+          to Google Gemini for visual analysis. Body landmarks are detected in your browser, then
+          sent with the image so the server can calculate 2D angles. Processing is not performed
+          entirely on your phone.
         </p>
         <p>
           The report is saved to your account. Uploaded images use server storage; their
@@ -48,8 +50,8 @@ function SettingsScreen() {
           camera access fails, allow permission and tap Restart scan.
         </p>
         <p>
-          Results describe the image. Heart rate, height, weight, and other unsupported measurements
-          are marked as not measured.
+          Results include estimated 2D body angles when landmarks are clear. Heart rate, height,
+          weight, and other unsupported measurements are marked as not measured.
         </p>
         <p>
           Theme: dark · Language: English. Reminders and additional preferences are not available in

@@ -29,8 +29,8 @@ function Home() {
       <GlassCard className="p-6">
         <h2 className="text-lg font-semibold">Ready for a photo scan?</h2>
         <p className="mt-3 text-sm text-muted-foreground">
-          Get observations about framing, lighting, and visible body position. Health measurements
-          are not produced by this scan.
+          Estimate visible joint angles and get observations about framing, lighting, and body
+          position. Health measurements are not produced by this scan.
         </p>
         <Link to="/scan" className="aurora mt-5 inline-block rounded-2xl px-6 py-3 font-semibold">
           Start a scan

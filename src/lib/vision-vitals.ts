@@ -10,5 +10,10 @@ export const captureVision = createServerFn({ method: "POST" })
     if (!backendUrl) {
       throw new Error("The scan service is not configured. Please contact support.");
     }
-    return requestPhoneAnalysis(backendUrl, userAccessToken, data.get("image") as File);
+    return requestPhoneAnalysis(
+      backendUrl,
+      userAccessToken,
+      data.get("image") as File,
+      data.get("pose_capture") as string | null,
+    );
   });

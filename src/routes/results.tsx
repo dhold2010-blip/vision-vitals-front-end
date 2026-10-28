@@ -1,3 +1,4 @@
+import { CameraMeasurements } from "@/components/vv/camera-metrics";
 import { ReportDate } from "@/components/vv/report-date";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronDown, Download, RefreshCw } from "lucide-react";
@@ -68,7 +69,7 @@ function Results() {
         subtitle={
           unavailable
             ? "Photo received · a clearer capture may be needed"
-            : "Image-specific observations · no health score"
+            : "Camera angle estimates and photo observations"
         }
       />
       <GlassCard className="animate-scale-in overflow-hidden p-6">
@@ -95,17 +96,7 @@ function Results() {
         </div>
       </GlassCard>
 
-      <div className="mt-4 grid grid-cols-3 gap-3">
-        {["Age", "Height", "Weight"].map((label) => (
-          <GlassCard key={label} className="p-3 text-center sm:p-4">
-            <p className="text-2xl font-bold" aria-hidden="true">
-              —
-            </p>
-            <p className="text-xs font-semibold">{label}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">Not measured</p>
-          </GlassCard>
-        ))}
-      </div>
+      <CameraMeasurements report={result.camera_metrics ?? null} />
 
       <SectionTitle className="mt-8 mb-3" title="Photo observations" />
       {observations.length ? (
@@ -120,16 +111,17 @@ function Results() {
       ) : (
         <GlassCard className="p-5">
           <p className="text-sm text-muted-foreground">
-            This older report contains only the summary above. Take a new photo for separate
-            framing, lighting, and visible posture observations.
+            {result.camera_metrics
+              ? "Separate photo descriptions are unavailable for this capture. Any usable camera measurements are shown above."
+              : "This older report contains only the summary above. Take a new photo for separate framing, lighting, and visible posture observations."}
           </p>
         </GlassCard>
       )}
 
-      <SectionTitle className="mt-8 mb-3" title="Full breakdown" />
+      <SectionTitle className="mt-8 mb-3" title="Not measured by this scan" />
       <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
-        These measurements are not produced by this photo scan. Missing readings are not zero
-        readings.
+        These require other inputs, calibration, sensors, or validated methods. No readings are
+        invented from appearance.
       </p>
       <ul className="grid gap-3">
         {unsupportedMeasurements.map((item) => (

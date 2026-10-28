@@ -113,3 +113,11 @@ describe("phone analysis API", () => {
     expect(validateScanImage(form)).toBe(form);
   });
 });
+
+it("forwards the browser landmarks unchanged for backend validation and calculation", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true, data: analysis }));
+  vi.stubGlobal("fetch", fetchMock);
+  const pose = JSON.stringify({ version: 1, status: "NO_POSE" });
+  await requestPhoneAnalysis("https://api.example", "token", new File(["x"], "x.jpg"), pose);
+  expect(fetchMock.mock.calls[0]![1].body.get("pose_capture")).toBe(pose);
+});

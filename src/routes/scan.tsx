@@ -6,6 +6,7 @@ import { scanStages } from "@/lib/vitals";
 import { getCurrentUser } from "@/lib/auth";
 import { captureVision } from "@/lib/vision-vitals";
 import { cn } from "@/lib/utils";
+import { capturePose } from "@/lib/pose-capture";
 
 export const Route = createFileRoute("/scan")({
   beforeLoad: async () => {
@@ -48,15 +49,16 @@ function ScanScreen() {
     if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
-  const captureCurrentFrame = useCallback(async () => {
+  const captureCurrentFrame = useCallback(async (signal: AbortSignal) => {
     const video = videoRef.current;
     if (!streamRef.current?.active || !video || video.videoWidth === 0 || video.videoHeight === 0) {
       throw new Error("The camera frame is not ready. Please retry the scan.");
     }
 
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
     const context = canvas.getContext("2d");
     if (!context) {
       throw new Error("The browser could not prepare the camera image.");
@@ -78,6 +80,9 @@ function ScanScreen() {
     });
     const formData = new FormData();
     formData.append("image", image);
+    const pose = await capturePose(canvas, signal);
+    signal.throwIfAborted();
+    formData.append("pose_capture", JSON.stringify(pose));
 
     return captureVision({ data: formData });
   }, []);
@@ -148,7 +153,8 @@ function ScanScreen() {
   useEffect(() => {
     if (phase !== "analyzing") return;
     let cancelled = false;
-    void captureCurrentFrame()
+    const controller = new AbortController();
+    void captureCurrentFrame(controller.signal)
       .then((result) => {
         if (cancelled) return;
         stop();
@@ -167,6 +173,7 @@ function ScanScreen() {
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [captureCurrentFrame, navigate, phase, stop]);
 
@@ -183,7 +190,7 @@ function ScanScreen() {
   const status =
     phase === "idle"
       ? cameraReady
-        ? "Stand 1.5 m back, full body in frame"
+        ? "Full body visible · camera level · one person"
         : cameraError
           ? "Camera unavailable · tap Restart scan"
           : "Allow camera access in your browser to start"

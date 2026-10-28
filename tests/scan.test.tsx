@@ -4,6 +4,15 @@ import type { ComponentType, ReactNode } from "react";
 
 const { capture, navigate } = vi.hoisted(() => ({ capture: vi.fn(), navigate: vi.fn() }));
 vi.mock("@/lib/vision-vitals", () => ({ captureVision: capture }));
+vi.mock("@/lib/pose-capture", () => ({
+  capturePose: vi.fn(async () => ({
+    version: 1,
+    status: "MODEL_UNAVAILABLE",
+    landmarks: [],
+    width: 640,
+    height: 480,
+  })),
+}));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("@/components/vv/app-shell", () => ({ Backdrop: () => null }));
 vi.mock("@tanstack/react-router", () => ({
@@ -162,4 +171,17 @@ it("explains pending permission instead of showing an unexplained disabled captu
   await openCamera();
   expect(screen.getByText("Allow camera access in your browser to start")).toBeTruthy();
   expect((screen.getByLabelText("Start scan") as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("sends landmark metadata from the captured frame with the photo", async () => {
+  capture.mockResolvedValue({ id: "pose-scan" });
+  await openCamera();
+  await startScan();
+  const form = capture.mock.calls[0]![0].data as FormData;
+  expect(form.get("image")).toBeInstanceOf(File);
+  expect(JSON.parse(form.get("pose_capture") as string)).toMatchObject({
+    version: 1,
+    width: 640,
+    height: 480,
+  });
 });

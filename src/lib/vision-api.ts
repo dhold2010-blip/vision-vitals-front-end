@@ -1,3 +1,20 @@
+export type CameraMetric = {
+  key: string;
+  label: string;
+  value: number | null;
+  unit: "degrees";
+  status: "ESTIMATED" | "UNAVAILABLE";
+  reason: string;
+};
+export type CameraMetrics = {
+  version: 1;
+  method: string;
+  source: string;
+  status: "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
+  metrics: CameraMetric[];
+  limitations: string[];
+};
+
 export type VisualAssessment = {
   subject_visible: boolean;
   framing: string;
@@ -21,6 +38,7 @@ export type VisionAnalysis = {
     limitations: string[];
     request_id: string;
     visual_assessment?: VisualAssessment | null;
+    camera_metrics?: CameraMetrics | null;
   } | null;
 };
 
@@ -73,6 +91,10 @@ export function validateScanImage(data: unknown): FormData {
   if (image.type !== "image/jpeg" && image.type !== "image/png") {
     throw new Error("The scan image must be a JPEG or PNG photo.");
   }
+  const pose = data.get("pose_capture");
+  if (pose !== null && (typeof pose !== "string" || pose.length > 16000)) {
+    throw new Error("The camera landmark data is invalid. Please retry the scan.");
+  }
   return data;
 }
 
@@ -86,6 +108,8 @@ export function isAnalysis(value: unknown): value is VisionAnalysis {
   const result = value["result"];
   if (result === null) return true;
   if (!isRecord(result)) return false;
+  const camera = result["camera_metrics"];
+  if (camera !== undefined && camera !== null && !isCameraMetrics(camera)) return false;
   const visual = result["visual_assessment"];
   if (visual !== undefined && visual !== null) {
     if (
@@ -117,16 +141,19 @@ export async function requestPhoneAnalysis(
   backendUrl: string,
   accessToken: string,
   image: File,
+  poseCapture?: string | null,
 ): Promise<VisionAnalysis> {
   const formData = new FormData();
   formData.append("image", image);
   formData.append("source", "APP_CAMERA");
+  if (poseCapture) formData.append("pose_capture", poseCapture);
   let response: Response;
   try {
     response = await fetch(`${backendUrl.replace(/\/+$/, "")}/api/v1/analyses`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       body: formData,
+      signal: AbortSignal.timeout(60000),
     });
   } catch {
     throw new Error(
@@ -139,4 +166,56 @@ export async function requestPhoneAnalysis(
     throw new Error("The scan service returned an invalid response. Please retry later.");
   }
   return payload["data"];
+}
+
+export function isCameraMetrics(value: unknown): value is CameraMetrics {
+  if (
+    !isRecord(value) ||
+    value["version"] !== 1 ||
+    typeof value["method"] !== "string" ||
+    typeof value["source"] !== "string"
+  )
+    return false;
+  if (!["AVAILABLE", "PARTIAL", "UNAVAILABLE"].includes(String(value["status"]))) return false;
+  if (
+    !Array.isArray(value["limitations"]) ||
+    !value["limitations"].every((item) => typeof item === "string")
+  )
+    return false;
+  if (!Array.isArray(value["metrics"]) || value["metrics"].length !== 7) return false;
+  const keys = new Set([
+    "shoulder_tilt",
+    "hip_tilt",
+    "torso_lean",
+    "left_elbow",
+    "right_elbow",
+    "left_knee",
+    "right_knee",
+  ]);
+  let available = 0;
+  for (const m of value["metrics"]) {
+    if (
+      !isRecord(m) ||
+      typeof m["key"] !== "string" ||
+      !keys.delete(m["key"]) ||
+      typeof m["label"] !== "string" ||
+      typeof m["reason"] !== "string" ||
+      m["unit"] !== "degrees"
+    )
+      return false;
+    if (m["status"] === "UNAVAILABLE") {
+      if (m["value"] !== null) return false;
+    } else if (
+      m["status"] === "ESTIMATED" &&
+      typeof m["value"] === "number" &&
+      Number.isFinite(m["value"]) &&
+      m["value"] >= 0 &&
+      m["value"] <= 180
+    )
+      available++;
+    else return false;
+  }
+  return (
+    value["status"] === (available === 7 ? "AVAILABLE" : available ? "PARTIAL" : "UNAVAILABLE")
+  );
 }

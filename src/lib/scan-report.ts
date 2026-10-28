@@ -23,7 +23,7 @@ export const unsupportedMeasurements = [
     key: "posture",
     label: "Posture score",
     reason:
-      "Visible body position is described above; no validated numeric posture score is calculated.",
+      "Individual image-plane angles are estimated separately; no validated overall posture score is calculated.",
   },
   {
     key: "heart-rate",
@@ -70,6 +70,17 @@ export function reportText(analysis: VisionAnalysis): string {
           ...visual.capture_tips.map((tip) => `Photo tip: ${tip}`),
         ]
       : []),
+    "Camera measurements — estimated 2D angles:",
+    ...(result.camera_metrics
+      ? [
+          ...result.camera_metrics.metrics.map(
+            (m) =>
+              `${m.label}: ${m.value === null ? "Not measurable in this capture" : `${m.value.toFixed(1)}° (estimated)`}. ${m.reason}`,
+          ),
+          `Method: ${result.camera_metrics.method}`,
+          ...result.camera_metrics.limitations.map((note) => `Measurement limitation: ${note}`),
+        ]
+      : ["This older report has no recorded body landmarks. Take a new scan."]),
     "Measurements not available from this scan:",
     ...unsupportedMeasurements.map((item) => `${item.label}: Not measured. ${item.reason}`),
     ...result.warnings.map((warning) => `Note: ${warning}`),

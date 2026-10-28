@@ -1,8 +1,6 @@
 export const scanStages = [
-  "Sending your photo",
-  "Reviewing the image",
-  "Checking visible framing",
-  "Reviewing lighting and body position",
-  "Preparing photo observations",
-  "Compiling your report",
+  "Finding body landmarks…",
+  "Estimating visible joint angles…",
+  "Saving your photo and measurements…",
+  "Preparing your report…",
 ];

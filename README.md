@@ -78,3 +78,24 @@ editing saves the display name to the backend, with email as the fallback. Prote
 routes require sign-in and saved reports open through `/results?id=<analysis-id>`.
 Settings signs out the backend session and clears local cookies. Unsupported demo
 preferences, subscriptions, charts, and sample health readings have been removed.
+
+## Camera measurements
+
+New scans run the pinned MediaPipe Pose Lite model on the same frozen canvas
+used for the photo upload. The runtime and model are served from this app;
+`predev`/`prebuild` copy runtime assets from the locked npm dependency. The model
+revision and SHA-256 are documented in `public/models/README.txt`.
+
+The browser submits normalized landmarks, not metric values. The backend
+validates them, calculates seven image-plane angles, and stores them with the
+report. See the backend API documentation for quality gates and limitations.
+Reports and text downloads distinguish estimates, capture-specific failures,
+and unsupported measurements. Old reports have no retroactive metrics; take
+a new scan. Model loading has a 30-second deadline; failure does not fabricate
+values or prevent saving a photo observation. A cancelled scan does not upload
+once landmark detection completes. On phones the first model download can take
+longer than later scans; cached assets are reused by the browser.
+
+These are single-image 2D landmark estimates. Camera perspective/tilt and pose
+occlusion affect results. No clinical measurements, physical dimensions, pulse,
+body composition, or health/posture scores are inferred from appearance.
