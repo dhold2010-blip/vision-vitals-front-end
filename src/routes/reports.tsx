@@ -52,6 +52,10 @@ function Reports() {
 
   return (
     <AppShell>
+      <p className="mb-5 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-muted-foreground">
+        Sample dashboard data — these numbers are not measurements from your camera scan. Your real
+        photo report appears after scanning.
+      </p>
       <PageHeader
         eyebrow="Analytics"
         title="Reports"

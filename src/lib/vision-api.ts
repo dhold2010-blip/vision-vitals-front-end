@@ -1,3 +1,11 @@
+export type VisualAssessment = {
+  subject_visible: boolean;
+  framing: string;
+  lighting: string;
+  posture: string;
+  capture_tips: string[];
+};
+
 export type VisionAnalysis = {
   id: string;
   status: string;
@@ -12,6 +20,7 @@ export type VisionAnalysis = {
     warnings: string[];
     limitations: string[];
     request_id: string;
+    visual_assessment?: VisualAssessment | null;
   } | null;
 };
 
@@ -77,6 +86,19 @@ function isAnalysis(value: unknown): value is VisionAnalysis {
   const result = value["result"];
   if (result === null) return true;
   if (!isRecord(result)) return false;
+  const visual = result["visual_assessment"];
+  if (visual !== undefined && visual !== null) {
+    if (
+      !isRecord(visual) ||
+      typeof visual["subject_visible"] !== "boolean" ||
+      !["framing", "lighting", "posture"].every(
+        (key) => typeof visual[key] === "string" && visual[key].length > 0,
+      ) ||
+      !Array.isArray(visual["capture_tips"]) ||
+      !visual["capture_tips"].every((tip) => typeof tip === "string")
+    )
+      return false;
+  }
   return (
     ["provider", "model", "observation", "result_status", "request_id"].every(
       (key) => typeof result[key] === "string",

@@ -17,10 +17,10 @@ export const Route = createFileRoute("/scan")({
       {
         name: "description",
         content:
-          "Run a live camera scan with face and body landmark detection, a scanning progress ring and real-time AI status.",
+          "Capture a photo for visual observations about framing, lighting, and body position.",
       },
       { property: "og:title", content: "Live AI scan — VisionVitals AI" },
-      { property: "og:description", content: "Face and body landmark detection in 14 seconds." },
+      { property: "og:description", content: "Photo observations and capture tips." },
     ],
   }),
   component: ScanScreen,
@@ -177,7 +177,7 @@ function ScanScreen() {
     phase === "idle"
       ? "Stand 1.5 m back, full body in frame"
       : phase === "scanning"
-        ? ["Detecting face…", "Analyzing body…", "Hold still…"][stageIndex % 3]
+        ? ["Position yourself in frame…", "Keep the camera steady…", "Hold still…"][stageIndex % 3]
         : scanStages[stageIndex];
 
   return (
@@ -193,7 +193,7 @@ function ScanScreen() {
             <X className="size-4" />
           </Link>
           <p className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">
-            {phase === "analyzing" ? "Neural analysis" : "Live scan"}
+            {phase === "analyzing" ? "Photo analysis" : "Live scan"}
           </p>
           <button
             type="button"

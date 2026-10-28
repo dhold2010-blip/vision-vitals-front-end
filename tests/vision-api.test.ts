@@ -82,6 +82,13 @@ describe("phone analysis API", () => {
   it.each([
     null,
     { success: true, data: {} },
+    {
+      success: true,
+      data: {
+        ...analysis,
+        result: { ...analysis.result, visual_assessment: { subject_visible: "true" } },
+      },
+    },
     { success: true, data: { ...analysis, result: { ...analysis.result, warnings: "invalid" } } },
   ])("rejects malformed success envelopes", async (payload) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(payload)));

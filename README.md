@@ -64,3 +64,14 @@ cancelled scans do not navigate when an earlier request finishes.
 Run `npm test`, `npx tsc --noEmit`, `npm run lint`, and `npm run build` before
 publishing changes. Tests cover the API contract, error mapping, camera retries,
 and cancellation without requiring real device credentials or camera hardware.
+
+### Real photo reports
+
+The original prototype report used fixed values from `src/lib/vitals.ts` (age 26,
+height 178 cm, weight 72.4 kg, heart rate 68, score 86). Those values are not camera
+measurements. The live results route displays the backend's photo-specific framing,
+lighting, and visible posture observations, capture tips, and explicit availability
+labels for unsupported measurements. Older results retain their summary and can be
+rescanned for the detailed report. Confidence is not presented as a health score.
+Download report produces a text file containing the actual report. The remaining
+sample dashboards are labeled as sample data; they are not populated by the scan.

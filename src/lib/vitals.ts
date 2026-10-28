@@ -246,10 +246,10 @@ export const compositionSplit = [
 ];
 
 export const scanStages = [
-  "Calibrating depth field",
-  "Detecting face landmarks",
-  "Mapping body skeleton",
-  "Reading micro-colour pulse",
-  "Modelling composition",
+  "Sending your photo",
+  "Reviewing the image",
+  "Checking visible framing",
+  "Reviewing lighting and body position",
+  "Preparing photo observations",
   "Compiling your report",
 ];

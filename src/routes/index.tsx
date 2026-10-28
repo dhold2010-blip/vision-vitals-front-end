@@ -41,6 +41,10 @@ function Home() {
 
   return (
     <AppShell>
+      <p className="mb-5 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-muted-foreground">
+        Sample dashboard data — these numbers are not measurements from your camera scan. Your real
+        photo report appears after scanning.
+      </p>
       <div className="animate-rise flex items-center justify-between">
         <Link to="/profile" className="press flex items-center gap-3">
           <span className="grid size-12 place-items-center rounded-2xl aurora text-base font-bold text-primary-foreground">
