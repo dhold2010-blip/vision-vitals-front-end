@@ -156,3 +156,10 @@ it("does not enable capture when video playback fails", async () => {
   expect((screen.getByLabelText("Start scan") as HTMLButtonElement).disabled).toBe(true);
   expect(stop).toHaveBeenCalled();
 });
+
+it("explains pending permission instead of showing an unexplained disabled capture button", async () => {
+  getUserMedia.mockImplementation(() => new Promise(() => {}));
+  await openCamera();
+  expect(screen.getByText("Allow camera access in your browser to start")).toBeTruthy();
+  expect((screen.getByLabelText("Start scan") as HTMLButtonElement).disabled).toBe(true);
+});

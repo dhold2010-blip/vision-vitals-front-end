@@ -182,7 +182,9 @@ function ScanScreen() {
   );
   const status =
     phase === "idle"
-      ? "Stand 1.5 m back, full body in frame"
+      ? cameraReady
+        ? "Stand 1.5 m back, full body in frame"
+        : "Allow camera access in your browser to start"
       : phase === "scanning"
         ? ["Position yourself in frame…", "Keep the camera steady…", "Hold still…"][stageIndex % 3]
         : scanStages[stageIndex];
